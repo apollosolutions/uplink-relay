@@ -1,6 +1,6 @@
 # Uplink Relay
 
-Uplink Relay is a caching reverse-proxy for Apollo Uplink. It's designed to improve the performance and reliability of your Apollo Uplink by caching responses and providing a round-robin load balancing mechanism.
+Uplink Relay is a caching reverse-proxy for Apollo Uplink. It's designed to improve the performance and reliability of Apollo Uplink by caching responses and providing local supergraph distribution.
 
 ## ⚠️ Disclaimer ⚠️
 
