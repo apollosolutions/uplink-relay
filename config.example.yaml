@@ -1,0 +1,11 @@
+relay:
+  address: "localhost:8080"
+uplink:
+  timeout: 10
+  retryCount: 5
+  urls:
+    - "https://uplink.api.apollographql.com/"
+    - "https://aws.uplink.api.apollographql.com/"
+cache:
+  duration: 60 # Cache duration in seconds
+  maxSize: 1024
