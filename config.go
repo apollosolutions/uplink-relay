@@ -10,14 +10,24 @@ import (
 // Config represents the application's configuration structure,
 // housing Relay, Uplink, and Cache configurations.
 type Config struct {
-	Relay  RelayConfig  `yaml:"relay"`  // RelayConfig for incoming connections.
-	Uplink UplinkConfig `yaml:"uplink"` // UplinkConfig for managing uplink configuration.
-	Cache  CacheConfig  `yaml:"cache"`  // CacheConfig for cache settings.
+	Relay   RelayConfig   `yaml:"relay"`   // RelayConfig for incoming connections.
+	Uplink  UplinkConfig  `yaml:"uplink"`  // UplinkConfig for managing uplink configuration.
+	Cache   CacheConfig   `yaml:"cache"`   // CacheConfig for cache settings.
+	Graphs  GraphConfig   `yaml:"graphs"`  // GraphConfig for supergraph settings.
+	Webhook WebhookConfig `yaml:"webhook"` // WebhookConfig for webhook handling.
+	Polling PollingConfig `yaml:"polling"` // PollingConfig for polling settings.
 }
 
 // RelayConfig defines the address the proxy server listens on.
 type RelayConfig struct {
-	Address string `yaml:"address"` // Address to bind the relay server on.
+	Address string         `yaml:"address"` // Address to bind the relay server on.
+	TLS     RelayTlsConfig `yaml:"tls"`     // TLS configuration for the relay server.
+}
+
+// RelayTlsConfig defines the TLS configuration for the relay server.
+type RelayTlsConfig struct {
+	CertFile string `yaml:"cert"` // Path to the certificate file.
+	KeyFile  string `yaml:"key"`  // Path to the key file.
 }
 
 // UplinkConfig details the configuration for connecting to upstream servers.
@@ -31,6 +41,24 @@ type UplinkConfig struct {
 type CacheConfig struct {
 	Duration int `yaml:"duration"` // Duration to keep cached content, in seconds.
 	MaxSize  int `yaml:"maxSize"`  // Maximum size of the cache.
+}
+
+// WebhookConfig defines the configuration for webhook handling.
+type WebhookConfig struct {
+	Enabled bool   `yaml:"enabled"` // Whether webhook handling is enabled.
+	Path    string `yaml:"path"`    // Path to bind the webhook handler on.
+	Cache   bool   `yaml:"cache"`   // Whether to cache webhook responses.
+}
+
+// PollingConfig defines the configuration for polling from uplink.
+type PollingConfig struct {
+	Enabled  bool `yaml:"enabled"`  // Whether polling is enabled.
+	Interval int  `yaml:"interval"` // Interval for polling, in seconds.
+}
+
+// GraphConfig defines the list of graphs to use.
+type GraphConfig struct {
+	GraphRefs []string `yaml:"graphRefs"` // List of graphs to use.
 }
 
 // LoadConfig reads and unmarshals a YAML configuration file into a Config struct.
@@ -52,6 +80,12 @@ func (c *Config) Validate() error {
 	if c.Relay.Address == "" {
 		return fmt.Errorf("relay address cannot be empty")
 	}
+	if c.Relay.TLS.CertFile == "" {
+		return fmt.Errorf("relay certFile cannot be empty")
+	}
+	if c.Relay.TLS.KeyFile == "" {
+		return fmt.Errorf("relay keyFile cannot be empty")
+	}
 
 	// Validate Uplink configuration
 	if len(c.Uplink.URLs) == 0 {
@@ -70,6 +104,11 @@ func (c *Config) Validate() error {
 	}
 	if c.Cache.MaxSize <= 0 {
 		return fmt.Errorf("cache maxSize must be positive")
+	}
+
+	// Validate Webhook configuration
+	if c.Webhook.Enabled && c.Webhook.Path == "" {
+		return fmt.Errorf("webhook path cannot be empty when webhook is enabled")
 	}
 
 	return nil

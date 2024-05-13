@@ -17,6 +17,7 @@ func main() {
 
 	// Parse command-line flags.
 	configPath := flag.String("config", "config.yml", "Path to the configuration file")
+	enableDebug := flag.Bool("debug", false, "Enable debug logging")
 	flag.Parse()
 
 	// Load the application configuration.
@@ -39,10 +40,19 @@ func main() {
 		Timeout: time.Duration(config.Uplink.Timeout) * time.Second,
 	}
 
+	// Set up the main request handler
+	RegisterHandlers("/*", relayHandler(config, cache, rrSelector, httpClient, enableDebug))
+
+	// Set up the webhook handler
+	RegisterHandlers("/webhook", webhookHandler(config, cache, httpClient, enableDebug))
+
+	// Start the polling loop if enabled
+	if config.Polling.Enabled {
+		go startPolling(config, cache, httpClient, enableDebug)
+	}
+
 	// Start the server and log its address.
-	server, err := StartServer(config.Relay.Address, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		handleRequest(w, r, config, cache, rrSelector, httpClient)
-	}))
+	server, err := StartServer(config)
 	if err != nil {
 		log.Fatalf("%v\n", err)
 	}
