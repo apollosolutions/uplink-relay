@@ -25,8 +25,13 @@ func StartServer(config *Config) (*http.Server, error) {
 	log.Printf("Starting Uplink Relay  🛰  at %s\n", address)
 	server := &http.Server{Addr: address, Handler: http.DefaultServeMux}
 	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			// if err := server.ListenAndServeTLS(config.Relay.TLS.CertFile, config.Relay.TLS.KeyFile); err != nil && err != http.ErrServerClosed {
+		var err error
+		if config.Relay.TLS.CertFile != "" && config.Relay.TLS.KeyFile != "" {
+			err = server.ListenAndServeTLS(config.Relay.TLS.CertFile, config.Relay.TLS.KeyFile)
+		} else {
+			err = server.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			log.Fatalf("ListenAndServe(): %v", err)
 		}
 	}()
@@ -113,8 +118,9 @@ func relayHandler(config *Config, cache *MemoryCache, rrSelector *RoundRobinSele
 		cacheKey := fmt.Sprintf("%s:%s", graphID, variantID)
 		content, found := cache.Get(cacheKey)
 		if found {
-			w.Write(content)
 			log.Printf("Cache hit for %s\n", cacheKey)
+			cacheResponse := fmt.Sprintf(`{"data":{"routerConfig":{"__typename":"RouterConfigResult","id":"UplinkRelay","supergraphSdl":"%s","minDelaySeconds":0}}}`, string(content))
+			w.Write([]byte(cacheResponse))
 			return
 		}
 
