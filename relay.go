@@ -158,17 +158,19 @@ func relayHandler(config *Config, cache *MemoryCache, rrSelector *RoundRobinSele
 				defer resp.Body.Close()
 
 				// Decode the response body into the UplinkResponse struct
-				var uplinkResponse UplinkResponse
-				decodeErr := json.NewDecoder(bytes.NewReader(body)).Decode(&uplinkResponse)
+				var response UplinkResponse
+				decodeErr := json.NewDecoder(bytes.NewReader(body)).Decode(&response)
 				if decodeErr != nil {
 					return fmt.Errorf("failed to decode response body: %w", decodeErr)
 				}
+				// Extract the schema from the UplinkResponse
+				schema := response.Data.RouterConfig.SupergraphSdl
 
 				// Log the UplinkResponse
-				debugLog(enableDebug, "UplinkResponse: %+v", uplinkResponse)
+				debugLog(enableDebug, "UplinkResponse: %+v", response)
 
 				// Cache the response for future requests.
-				cache.Set(cacheKey, body, config.Cache.Duration)
+				cache.Set(cacheKey, schema, config.Cache.Duration)
 				resp.Body = io.NopCloser(bytes.NewReader(body))
 
 				// Log the proxied response

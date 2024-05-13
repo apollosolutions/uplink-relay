@@ -37,7 +37,7 @@ func (c *MemoryCache) Get(key string) ([]byte, bool) {
 
 // Set adds an item to the cache with a specified duration until expiration.
 // If duration is -1, the item never expires.
-func (c *MemoryCache) Set(key string, content []byte, duration int) {
+func (c *MemoryCache) Set(key string, content string, duration int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -60,6 +60,6 @@ func (c *MemoryCache) Set(key string, content []byte, duration int) {
 		expiration = time.Unix(1<<63-1, 0) // Maximum possible time
 	}
 
-	c.items[key] = &CacheItem{Content: content, Expiration: expiration}
+	c.items[key] = &CacheItem{Content: []byte(content), Expiration: expiration}
 	c.currentSize++
 }

@@ -49,11 +49,13 @@ func webhookHandler(config *Config, cache *MemoryCache, httpClient *http.Client,
 		defer resp.Body.Close()
 
 		// Parse the fetched schema
-		schema, err := io.ReadAll(resp.Body)
+		response, err := io.ReadAll(resp.Body)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to read schema: %v", err), http.StatusInternalServerError)
 			return
 		}
+		// Convert the schema to a string
+		schema := string(response)
 
 		if config.Webhook.Cache {
 			// Create a cache key using the GraphID, VariantID

@@ -25,11 +25,13 @@ func startPolling(config *Config, cache *MemoryCache, httpClient *http.Client, e
 			graphID, variantID := parts[0], parts[1]
 
 			// Fetch the schema for the graph
-			schema, err := fetchSchema(config, httpClient, graphID, variantID)
+			response, err := fetchSchema(config, httpClient, graphID, variantID)
 			if err != nil {
 				log.Printf("Failed to fetch schema for graph %s: %v", graph, err)
 				continue
 			}
+			// Extract the schema from the response
+			schema := response.Data.RouterConfig.SupergraphSdl
 
 			// Update the cache
 			cacheKey := fmt.Sprintf("%s:%s", graphID, variantID)
@@ -79,7 +81,7 @@ func fetchSchema(config *Config, httpClient *http.Client, graphRef string, apiKe
 	req, err := http.NewRequest("POST", uplinkURL, bytes.NewBuffer(requestBody))
 
 	// Headers
-	req.Header.Set("User-Agent", "myClient")
+	req.Header.Set("User-Agent", "UplinkRelay/1.0")
 	req.Header.Set("Content-Type", "application/json")
 
 	// Send req using http Client
@@ -91,11 +93,11 @@ func fetchSchema(config *Config, httpClient *http.Client, graphRef string, apiKe
 	}
 	defer resp.Body.Close()
 
-	var uplinkResponse UplinkResponse
-	decodeErr := json.NewDecoder(resp.Body).Decode(&uplinkResponse)
+	var response UplinkResponse
+	decodeErr := json.NewDecoder(resp.Body).Decode(&response)
 	if decodeErr != nil {
 		return nil, fmt.Errorf("failed to decode response body: %w", decodeErr)
 	}
 
-	return &uplinkResponse, nil
+	return &response, nil
 }
