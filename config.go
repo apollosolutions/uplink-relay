@@ -11,12 +11,12 @@ import (
 // Config represents the application's configuration structure,
 // housing Relay, Uplink, and Cache configurations.
 type Config struct {
-	Relay   RelayConfig   `yaml:"relay"`   // RelayConfig for incoming connections.
-	Uplink  UplinkConfig  `yaml:"uplink"`  // UplinkConfig for managing uplink configuration.
-	Cache   CacheConfig   `yaml:"cache"`   // CacheConfig for cache settings.
-	Graphs  GraphConfig   `yaml:"graphs"`  // GraphConfig for supergraph settings.
-	Webhook WebhookConfig `yaml:"webhook"` // WebhookConfig for webhook handling.
-	Polling PollingConfig `yaml:"polling"` // PollingConfig for polling settings.
+	Relay       RelayConfig      `yaml:"relay"`       // RelayConfig for incoming connections.
+	Uplink      UplinkConfig     `yaml:"uplink"`      // UplinkConfig for managing uplink configuration.
+	Cache       CacheConfig      `yaml:"cache"`       // CacheConfig for cache settings.
+	Supergraphs SupergraphConfig `yaml:"supergraphs"` // GraphConfig for supergraph settings.
+	Webhook     WebhookConfig    `yaml:"webhook"`     // WebhookConfig for webhook handling.
+	Polling     PollingConfig    `yaml:"polling"`     // PollingConfig for polling settings.
 }
 
 // RelayConfig defines the address the proxy server listens on.
@@ -57,8 +57,8 @@ type PollingConfig struct {
 	Interval int  `yaml:"interval"` // Interval for polling, in seconds.
 }
 
-// GraphConfig defines the list of graphs to use.
-type GraphConfig struct {
+// SupergraphConfig defines the list of graphs to use.
+type SupergraphConfig struct {
 	GraphRefs map[string]string `yaml:"graphRefs"` // List of graphs to use.
 }
 
@@ -114,8 +114,8 @@ func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableD
 		loadedConfig.Cache.MaxSize = defaultConfig.Cache.MaxSize
 	}
 
-	if len(loadedConfig.Graphs.GraphRefs) == 0 {
-		loadedConfig.Graphs.GraphRefs = defaultConfig.Graphs.GraphRefs
+	if len(loadedConfig.Supergraphs.GraphRefs) == 0 {
+		loadedConfig.Supergraphs.GraphRefs = defaultConfig.Supergraphs.GraphRefs
 	}
 
 	if loadedConfig.Webhook.Path == "" {

@@ -76,6 +76,7 @@ type Jwt struct {
 	Jwt string `json:"jwt"`
 }
 
+// UplinkRouterEntitlements struct
 type UplinkRouterEntitlements struct {
 	ID              string  `json:"id"`
 	Typename        string  `json:"__typename"`
@@ -83,7 +84,7 @@ type UplinkRouterEntitlements struct {
 	Entitlement     Jwt     `json:"entitlement"`
 }
 
-// LicenseQueryResponse struct
+// UplinkLicenseResponse struct
 type UplinkLicenseResponse struct {
 	Data struct {
 		RouterEntitlements UplinkRouterEntitlements `json:"routerEntitlements"`

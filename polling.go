@@ -19,7 +19,7 @@ func startPolling(config *Config, cache *MemoryCache, httpClient *http.Client, e
 	defer ticker.Stop()
 
 	for range ticker.C {
-		for graphRef, graphApiKey := range config.Graphs.GraphRefs {
+		for graphRef, graphApiKey := range config.Supergraphs.GraphRefs {
 			debugLog(enableDebug, "Polling for graph: %s", graphRef)
 
 			// Split the graph into GraphID and VariantID

@@ -8,11 +8,11 @@ uplink:
   retryCount: 5
   urls:
     - "https://uplink.api.apollographql.com/"
-    # - "https://aws.uplink.api.apollographql.com/"
+    - "https://aws.uplink.api.apollographql.com/"
 cache:
   duration: 60 # Cache duration in seconds
   maxSize: 1024
-graphs:
+supergraphs:
   graphRefs:
     "${APOLLO_GRAPH_REF}": "${APOLLO_KEY}"
 polling:

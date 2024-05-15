@@ -75,7 +75,7 @@ func webhookHandler(config *Config, cache *MemoryCache, httpClient *http.Client,
 
 		// Check if the variantID is in the list of graphs from the configuration
 		// webhook variantID is in the format of a GraphRef
-		if !contains(config.Graphs.GraphRefs, data.VariantID) {
+		if !contains(config.Supergraphs.GraphRefs, data.VariantID) {
 			http.Error(w, "Graph not in the list of graphs", http.StatusBadRequest)
 			return
 		}
