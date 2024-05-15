@@ -48,7 +48,7 @@ type CacheConfig struct {
 type WebhookConfig struct {
 	Enabled bool   `yaml:"enabled"` // Whether webhook handling is enabled.
 	Path    string `yaml:"path"`    // Path to bind the webhook handler on.
-	Cache   bool   `yaml:"cache"`   // Whether to cache webhook responses.
+	Secret  string `yaml:"secret"`  // Secret for verifying webhook requests.
 }
 
 // PollingConfig defines the configuration for polling from uplink.
@@ -80,7 +80,7 @@ func NewDefaultConfig() *Config {
 		Webhook: WebhookConfig{
 			Enabled: false,
 			Path:    "/webhook",
-			Cache:   false,
+			Secret:  "",
 		},
 		Polling: PollingConfig{
 			Enabled:  false,

@@ -1,10 +1,14 @@
 package main
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -25,17 +29,48 @@ type WebhookData struct {
 
 func webhookHandler(config *Config, cache *MemoryCache, httpClient *http.Client, enableDebug *bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Verify the request signature
+		signatureHeader := r.Header.Get("x-apollo-signature")
+		if signatureHeader == "" {
+			http.Error(w, "Missing signature", http.StatusBadRequest)
+			return
+		}
+
+		parts := strings.SplitN(signatureHeader, "=", 2)
+		if len(parts) != 2 || parts[0] != "sha256" {
+			http.Error(w, "Invalid signature", http.StatusBadRequest)
+			return
+		}
+
+		secret := config.Webhook.Secret
+		if secret == "" {
+			http.Error(w, "Webhook secret not configured", http.StatusBadRequest)
+			return
+		}
+
+		mac := hmac.New(sha256.New, []byte(secret))
+		_, err := io.Copy(mac, r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read request body: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		expectedMAC := hex.EncodeToString(mac.Sum(nil))
+		if !hmac.Equal([]byte(parts[1]), []byte(expectedMAC)) {
+			http.Error(w, "Invalid signature", http.StatusBadRequest)
+			return
+		}
 		// Parse the incoming webhook data
 		var data WebhookData
-		err := json.NewDecoder(r.Body).Decode(&data)
+		err = json.NewDecoder(r.Body).Decode(&data)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		// Check if the GraphRef is in the list of graphs from the configuration
-		graph := fmt.Sprintf("%s@%s", data.GraphID, data.VariantID)
-		if !contains(config.Graphs.GraphRefs, graph) {
+		// Check if the variantID is in the list of graphs from the configuration
+		// webhook variantID is in the format of a GraphRef
+		if !contains(config.Graphs.GraphRefs, data.VariantID) {
 			http.Error(w, "Graph not in the list of graphs", http.StatusBadRequest)
 			return
 		}
@@ -57,19 +92,18 @@ func webhookHandler(config *Config, cache *MemoryCache, httpClient *http.Client,
 		// Convert the schema to a string
 		schema := string(response)
 
-		if config.Webhook.Cache {
-			// Create a cache key using the GraphID, VariantID
-			cacheKey := fmt.Sprintf("%s:%s", data.GraphID, data.VariantID)
-
-			// Set the cache TTL based on the Cache duration from the configuration
-			ttl := time.Duration(config.Cache.Duration) * time.Second
-			if ttl == 0 {
-				ttl = -1 // Cache indefinitely if duration is 0
-			}
-
-			// Update the cache using the fetched schema
-			cache.Set(cacheKey, schema, int(ttl.Seconds()))
+		// Parse the GraphID and VariantID from the webhook data
+		graphID, variantID, err := parseGraphRef(data.VariantID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to parse variantID from webhook: %s", data.VariantID), http.StatusInternalServerError)
+			return
 		}
+
+		// Create a cache key using the GraphID, VariantID
+		cacheKey := makeCacheKey(graphID, variantID, "SupergraphSdlQuery")
+
+		// Update the cache using the fetched schema
+		cache.Set(cacheKey, schema, config.Cache.Duration)
 
 		// Send a response back to the webhook sender
 		w.WriteHeader(http.StatusOK)

@@ -51,8 +51,10 @@ func main() {
 	// Set up the main request handler
 	RegisterHandlers("/*", relayHandler(config, cache, rrSelector, httpClient, enableDebug))
 
-	// Set up the webhook handler
-	RegisterHandlers("/webhook", webhookHandler(config, cache, httpClient, enableDebug))
+	// Set up the webhook handler if enabled
+	if config.Webhook.Enabled {
+		RegisterHandlers(config.Webhook.Path, webhookHandler(config, cache, httpClient, enableDebug))
+	}
 
 	// Start the polling loop if enabled
 	if config.Polling.Enabled {

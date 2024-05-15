@@ -18,3 +18,7 @@ graphs:
 polling:
   enabled: true
   interval: 10
+webhook:
+  enabled: true
+  path: "/webhook"
+  secret: "${APOLLO_WEBHOOK_SECRET}"
