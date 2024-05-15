@@ -14,6 +14,7 @@ type Config struct {
 	Relay       RelayConfig        `yaml:"relay"`       // RelayConfig for incoming connections.
 	Uplink      UplinkConfig       `yaml:"uplink"`      // UplinkConfig for managing uplink configuration.
 	Cache       CacheConfig        `yaml:"cache"`       // CacheConfig for cache settings.
+	Redis       RedisConfig        `yaml:"redis"`       // RedisConfig for using redis as cache.
 	Supergraphs []SupergraphConfig `yaml:"supergraphs"` // SupergraphConfig for supergraph settings.
 	Webhook     WebhookConfig      `yaml:"webhook"`     // WebhookConfig for webhook handling.
 	Polling     PollingConfig      `yaml:"polling"`     // PollingConfig for polling settings.
@@ -43,6 +44,16 @@ type CacheConfig struct {
 	Enabled  bool `yaml:"enabled"`  // Whether caching is enabled.
 	Duration int  `yaml:"duration"` // Duration to keep cached content, in seconds.
 	MaxSize  int  `yaml:"maxSize"`  // Maximum size of the cache.
+}
+
+// RedisConfig defines the configuration for connecting to a Redis cache.
+type RedisConfig struct {
+	Enabled   bool   `yaml:"enabled"`   // Whether Redis caching is enabled.
+	Address   string `yaml:"address"`   // Address of the Redis server.
+	Password  string `yaml:"password"`  // Password for Redis authentication.
+	Timeout   string `yaml:"timeout"`   // Timeout for Redis requests.
+	TTL       string `yaml:"ttl"`       // Time-to-live for cached content.
+	Namespace string `yaml:"namespace"` // Namespace for Redis keys.
 }
 
 // WebhookConfig defines the configuration for webhook handling.

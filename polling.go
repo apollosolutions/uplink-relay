@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func startPolling(config *Config, cache *MemoryCache, httpClient *http.Client, enableDebug *bool) {
+func startPolling(config *Config, cache Cache, httpClient *http.Client, enableDebug *bool) {
 	// Log when polling starts
 	debugLog(enableDebug, "Polling started")
 

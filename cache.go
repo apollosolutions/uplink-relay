@@ -6,6 +6,12 @@ import (
 	"time"
 )
 
+// Cache represents a simple cache interface.
+type Cache interface {
+	Get(key string) ([]byte, bool)                      // Get retrieves an item from the cache if it exists and hasn't expired.
+	Set(key string, content string, duration int) error // Set adds an item to the cache with a specified duration until expiration.
+}
+
 // CacheItem represents a single cached item.
 type CacheItem struct {
 	Content    []byte    // Byte content of the cached item.
@@ -38,7 +44,7 @@ func (c *MemoryCache) Get(key string) ([]byte, bool) {
 
 // Set adds an item to the cache with a specified duration until expiration.
 // If duration is -1, the item never expires.
-func (c *MemoryCache) Set(key string, content string, duration int) {
+func (c *MemoryCache) Set(key string, content string, duration int) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -63,6 +69,8 @@ func (c *MemoryCache) Set(key string, content string, duration int) {
 
 	c.items[key] = &CacheItem{Content: []byte(content), Expiration: expiration}
 	c.currentSize++
+
+	return nil
 }
 
 // makeCacheKey generates a cache key from the provided graphID, variantID, and operationName.

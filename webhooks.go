@@ -28,7 +28,7 @@ type WebhookData struct {
 	Timestamp          time.Time      `json:"timestamp"`
 }
 
-func webhookHandler(config *Config, cache *MemoryCache, httpClient *http.Client, enableDebug *bool) http.HandlerFunc {
+func webhookHandler(config *Config, cache Cache, httpClient *http.Client, enableDebug *bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Verify the request signature
 		signatureHeader := r.Header.Get("x-apollo-signature")

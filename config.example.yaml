@@ -13,6 +13,12 @@ cache:
   enabled: true
   duration: 60 # Cache duration in seconds, default is -1 (forever)
   maxSize: 1024
+# redis: 
+#   address: "redis://..."
+#   password: admin # Optional
+#   timeout: 5ms # Optional
+#   ttl: 24h # Optional
+  namespace: "prefix"  # Optional
 supergraphs:
   - graphRef: "${APOLLO_GRAPH_REF}"
     apolloKey: "${APOLLO_KEY}"

@@ -10,6 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/go-redis/redis"
 )
 
 // main contains the main application logic.
@@ -39,8 +41,19 @@ func main() {
 		log.Fatalf("Configuration validation failed: %v", err)
 	}
 
-	// Initialize caching and URL selection mechanisms.
-	cache := NewMemoryCache(config.Cache.MaxSize)
+	// Initialize caching based on the configuration.
+	var cache Cache
+	if config.Redis.Enabled {
+		redisClient := redis.NewClient(&redis.Options{
+			Addr:     config.Redis.Address,
+			Password: config.Redis.Password,
+			// DB:       config.Redis.Database,
+		})
+		cache = NewRedisCache(redisClient)
+	} else {
+		cache = NewMemoryCache(config.Cache.MaxSize)
+	}
+	// Initialize the round-robin URL selector.
 	rrSelector := NewRoundRobinSelector(config.Uplink.URLs)
 
 	// Configure the HTTP client with a timeout.

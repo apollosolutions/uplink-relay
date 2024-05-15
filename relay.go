@@ -179,7 +179,7 @@ func parseGraphRef(graphRef string) (string, string, error) {
 }
 
 // Modifies the proxied response before it is returned to the client.
-func modifyProxiedResponse(config *Config, cache *MemoryCache, cacheKey string, uplinkRequest UplinkRelayRequest, enableDebug *bool) func(*http.Response) error {
+func modifyProxiedResponse(config *Config, cache Cache, cacheKey string, uplinkRequest UplinkRelayRequest, enableDebug *bool) func(*http.Response) error {
 	return func(resp *http.Response) error {
 		// Debug log the response headers
 		debugResponseHeaders(enableDebug, resp.Header)
@@ -258,7 +258,7 @@ func modifyProxiedResponse(config *Config, cache *MemoryCache, cacheKey string, 
 }
 
 // Creates a reverse proxy to the target URL.
-func makeProxy(config *Config, cache *MemoryCache, httpClient *http.Client, enableDebug *bool) func(*url.URL, string, UplinkRelayRequest) *httputil.ReverseProxy {
+func makeProxy(config *Config, cache Cache, httpClient *http.Client, enableDebug *bool) func(*url.URL, string, UplinkRelayRequest) *httputil.ReverseProxy {
 	return func(targetURL *url.URL, cacheKey string, uplinkRequest UplinkRelayRequest) *httputil.ReverseProxy {
 		proxy := httputil.NewSingleHostReverseProxy(targetURL)
 		proxy.Transport = httpClient.Transport
@@ -280,7 +280,7 @@ func parseUrl(target string) (*url.URL, error) {
 }
 
 // Handles a cache hit by returning the cached response.
-func handleCacheHit(config *Config, cache *MemoryCache, client *http.Client, cacheKey string, content []byte, enableDebug *bool) func(w http.ResponseWriter, r *http.Request) error {
+func handleCacheHit(config *Config, cache Cache, client *http.Client, cacheKey string, content []byte, enableDebug *bool) func(w http.ResponseWriter, r *http.Request) error {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		var response interface{}
 
@@ -340,7 +340,7 @@ func handleCacheHit(config *Config, cache *MemoryCache, client *http.Client, cac
 }
 
 // Handles a cache miss by proxying the request to the uplink service.
-func handleCacheMiss(config *Config, cache *MemoryCache, httpClient *http.Client, rrSelector *RoundRobinSelector, cacheKey string, uplinkRequest UplinkRelayRequest, enableDebug *bool) func(w http.ResponseWriter, r *http.Request) error {
+func handleCacheMiss(config *Config, cache Cache, httpClient *http.Client, rrSelector *RoundRobinSelector, cacheKey string, uplinkRequest UplinkRelayRequest, enableDebug *bool) func(w http.ResponseWriter, r *http.Request) error {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		// Configure the reverse proxy for the chosen uplink.
 		rrUrl := rrSelector.Next()
@@ -361,7 +361,7 @@ func handleCacheMiss(config *Config, cache *MemoryCache, httpClient *http.Client
 }
 
 // Handles requests to the relay endpoint.
-func relayHandler(config *Config, cache *MemoryCache, rrSelector *RoundRobinSelector, httpClient *http.Client, enableDebug *bool) http.HandlerFunc {
+func relayHandler(config *Config, cache Cache, rrSelector *RoundRobinSelector, httpClient *http.Client, enableDebug *bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Debug log the request
 		debugLog(enableDebug, "Received request: %s %s %s", r.Method, r.URL.Path, r.Header)
