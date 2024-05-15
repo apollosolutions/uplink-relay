@@ -40,8 +40,8 @@ cache:
   duration: 60 # Cache duration in seconds
   maxSize: 1024
 supergraphs:
-  graphRefs:
-    "${APOLLO_GRAPH_REF}": "${APOLLO_KEY}" # Add your graph refs and keys here, or use environment variables
+  - graphRef: "${APOLLO_GRAPH_REF}" # Add your graph refs here, or use environment variables
+    apolloKey: "${APOLLO_KEY}"
 polling:
   enabled: true
   interval: 10
