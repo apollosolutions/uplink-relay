@@ -12,6 +12,9 @@ We may not respond to issues and pull requests at this time.
 - **Caching**: Uplink Relay caches responses from Apollo Uplink, reducing the egress to Apollo Uplink servers and improving response times.
 - **Load Balancing**: Uplink Relay uses a round-robin algorithm to distribute requests evenly across multiple Apollo Uplink instances (GCP/AWS).
 - **Configurable**: Uplink Relay allows you to configure various parameters such as cache duration and maximum cache size.
+- **Polling**: Uplink Relay supports polling to periodically fetch the supergraph schema from Apollo Uplink. This ensures that the cached supergraph schema is always up-to-date.
+- **Webhooks**: Uplink Relay can be configured to listen for webhooks, which can trigger an immediate fetch of the supergraph schema when a change is detected.
+- **Uplink Proxy**: Uplink Relay acts as a proxy for retrieving a supergraph schema, reducing the need for direct communication between Apollo Router and Apollo Uplink.
 
 ## Getting Started
 
