@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -104,11 +105,15 @@ func webhookHandler(config *Config, cache *MemoryCache, httpClient *http.Client,
 			return
 		}
 
-		// Create a cache key using the GraphID, VariantID
-		cacheKey := makeCacheKey(graphID, variantID, "SupergraphSdlQuery")
+		if config.Cache.Enabled {
+			// Create a cache key using the GraphID, VariantID
+			cacheKey := makeCacheKey(graphID, variantID, "SupergraphSdlQuery")
 
-		// Update the cache using the fetched schema
-		cache.Set(cacheKey, schema, config.Cache.Duration)
+			// Update the cache using the fetched schema
+			cache.Set(cacheKey, schema, config.Cache.Duration)
+		} else {
+			log.Printf("Cache is disabled, skipping cache update for GraphID %s, VariantID %s", graphID, variantID)
+		}
 
 		// Send a response back to the webhook sender
 		w.WriteHeader(http.StatusOK)

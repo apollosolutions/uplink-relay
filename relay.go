@@ -169,6 +169,7 @@ func debugResponseBody(enableDebug *bool, r *http.Response) {
 	}
 }
 
+// Parses the graph_ref into graphID and variantID.
 func parseGraphRef(graphRef string) (string, string, error) {
 	graphParts := strings.Split(graphRef, "@")
 	if len(graphParts) != 2 {
@@ -177,6 +178,7 @@ func parseGraphRef(graphRef string) (string, string, error) {
 	return graphParts[0], graphParts[1], nil
 }
 
+// Modifies the proxied response before it is returned to the client.
 func modifyProxiedResponse(config *Config, cache *MemoryCache, cacheKey string, uplinkRequest UplinkRelayRequest, enableDebug *bool) func(*http.Response) error {
 	return func(resp *http.Response) error {
 		// Debug log the response headers
@@ -237,8 +239,11 @@ func modifyProxiedResponse(config *Config, cache *MemoryCache, cacheKey string, 
 			// Log the LicenseQueryResponse
 			debugLog(enableDebug, "LicenseQuery response: %+v", uplinkResponse)
 
-			// Cache the response for future requests.
-			cache.Set(cacheKey, jwt, config.Cache.Duration)
+			// Cache the response for future requests, if caching is enabled
+			if config.Cache.Enabled {
+				debugLog(enableDebug, "Caching JWT for %s", cacheKey)
+				cache.Set(cacheKey, jwt, config.Cache.Duration)
+			}
 
 		}
 
@@ -252,7 +257,7 @@ func modifyProxiedResponse(config *Config, cache *MemoryCache, cacheKey string, 
 	}
 }
 
-// makeProxy creates a reverse proxy to the target URL.
+// Creates a reverse proxy to the target URL.
 func makeProxy(config *Config, cache *MemoryCache, httpClient *http.Client, enableDebug *bool) func(*url.URL, string, UplinkRelayRequest) *httputil.ReverseProxy {
 	return func(targetURL *url.URL, cacheKey string, uplinkRequest UplinkRelayRequest) *httputil.ReverseProxy {
 		proxy := httputil.NewSingleHostReverseProxy(targetURL)
@@ -265,6 +270,7 @@ func makeProxy(config *Config, cache *MemoryCache, httpClient *http.Client, enab
 	}
 }
 
+// Parses the target URL.
 func parseUrl(target string) (*url.URL, error) {
 	proxyUrl, err := url.Parse(target)
 	if err != nil {
@@ -273,8 +279,9 @@ func parseUrl(target string) (*url.URL, error) {
 	return proxyUrl, nil
 }
 
-func handleCacheHit(config *Config, cache *MemoryCache, client *http.Client, cacheKey string, content []byte, enableDebug *bool) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
+// Handles a cache hit by returning the cached response.
+func handleCacheHit(config *Config, cache *MemoryCache, client *http.Client, cacheKey string, content []byte, enableDebug *bool) func(w http.ResponseWriter, r *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		var response interface{}
 
 		// Format the response body based on operation name
@@ -311,7 +318,7 @@ func handleCacheHit(config *Config, cache *MemoryCache, client *http.Client, cac
 		if err != nil {
 			log.Printf("Failed to marshal response: %v\n", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
+			return nil
 		}
 
 		// Write the cached content to the response
@@ -319,19 +326,22 @@ func handleCacheHit(config *Config, cache *MemoryCache, client *http.Client, cac
 		if err != nil {
 			log.Printf("Failed to write response: %v\n", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
+			return nil
 		}
 
 		// Set the appropriate headers
-		w.Header().Set("X-Relay-Cache-Hit", "true")
+		w.Header().Set("X-Cache-Hit", "true")
 
 		// Log the response
 		debugLog(enableDebug, "Cached Response: %s", responseBody)
+
+		return nil
 	}
 }
 
-func handleCacheMiss(config *Config, cache *MemoryCache, httpClient *http.Client, rrSelector *RoundRobinSelector, cacheKey string, uplinkRequest UplinkRelayRequest, enableDebug *bool) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
+// Handles a cache miss by proxying the request to the uplink service.
+func handleCacheMiss(config *Config, cache *MemoryCache, httpClient *http.Client, rrSelector *RoundRobinSelector, cacheKey string, uplinkRequest UplinkRelayRequest, enableDebug *bool) func(w http.ResponseWriter, r *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// Configure the reverse proxy for the chosen uplink.
 		rrUrl := rrSelector.Next()
 		uplinkUrl, uplinkUrlErr := parseUrl(rrUrl)
@@ -345,10 +355,12 @@ func handleCacheMiss(config *Config, cache *MemoryCache, httpClient *http.Client
 
 		// Serve the proxied request
 		proxy.ServeHTTP(w, r)
+
+		return nil
 	}
 }
 
-// relayHandler handles requests to the relay endpoint.
+// Handles requests to the relay endpoint.
 func relayHandler(config *Config, cache *MemoryCache, rrSelector *RoundRobinSelector, httpClient *http.Client, enableDebug *bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Debug log the request
@@ -382,18 +394,39 @@ func relayHandler(config *Config, cache *MemoryCache, rrSelector *RoundRobinSele
 		// Make the cache key using the graphID, variantID, and operationName
 		cacheKey := makeCacheKey(graphID, variantID, operationName)
 
-		// Check if the response is cached and return it if found
-		cacheContent, keyFound := cache.Get(cacheKey)
+		// If cache is enabled, attempt to retrieve the response from the cache
+		if config.Cache.Enabled {
 
-		// Handle the request based on cache hit or miss
-		if keyFound {
-			// Handle the cache hit
-			log.Printf("Cache hit for %s\n", cacheKey)
-			handleCacheHit(config, cache, httpClient, cacheKey, cacheContent, enableDebug)(w, r)
-		} else {
-			// Handle the cache miss
-			log.Printf("Cache miss for %s\n", cacheKey)
-			handleCacheMiss(config, cache, httpClient, rrSelector, cacheKey, uplinkRequest, enableDebug)(w, r)
+			// Check if the response is cached and return it if found
+			if cacheContent, keyFound := cache.Get(cacheKey); keyFound {
+				// Handle the cache hit
+				log.Printf("Cache hit for %s\n", cacheKey)
+				handleCacheHit(config, cache, httpClient, cacheKey, cacheContent, enableDebug)(w, r)
+				return
+			}
+
+		}
+
+		// If the response is not cached, proxy the request to the uplink service
+		// and cache the response for future requests
+		log.Printf("Cache miss for %s\n", cacheKey)
+
+		success := false
+		for attempt := 0; attempt <= config.Uplink.RetryCount && !success; attempt++ {
+			err := handleCacheMiss(config, cache, httpClient, rrSelector, cacheKey, uplinkRequest, enableDebug)(w, r)
+			if err != nil {
+				log.Printf("Request %d to uplink failed: %v", attempt, err)
+				if attempt == config.Uplink.RetryCount {
+					log.Printf("Failed to proxy request after %d attempts: %v", config.Uplink.RetryCount, err)
+					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+					return
+				}
+				log.Printf("Retrying...")
+			} else {
+				log.Printf("Successfully proxied request for %s\n", cacheKey)
+				success = true
+				break
+			}
 		}
 
 	}

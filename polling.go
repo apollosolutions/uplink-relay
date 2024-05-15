@@ -15,54 +15,68 @@ func startPolling(config *Config, cache *MemoryCache, httpClient *http.Client, e
 	// Log when polling starts
 	debugLog(enableDebug, "Polling started")
 
+	// Create a new ticker with the polling interval
 	ticker := time.NewTicker(time.Duration(config.Polling.Interval) * time.Second)
+	// Stop the ticker when the function returns
 	defer ticker.Stop()
 
+	// Poll for updates at the specified interval
 	for range ticker.C {
 		for _, supergraphConfig := range config.Supergraphs {
-			debugLog(enableDebug, "Polling for graph: %s", supergraphConfig.GraphRef)
+			// Poll for the graph
+			success := false
+			for i := 0; i < config.Polling.RetryCount && !success; i++ {
+				debugLog(enableDebug, "Polling for graph: %s", supergraphConfig.GraphRef)
 
-			// Split the graph into GraphID and VariantID
-			parts := strings.Split(supergraphConfig.GraphRef, "@")
-			if len(parts) != 2 {
-				log.Printf("Invalid GraphRef: %s", supergraphConfig.GraphRef)
-				continue
+				// Split the graph into GraphID and VariantID
+				parts := strings.Split(supergraphConfig.GraphRef, "@")
+				if len(parts) != 2 {
+					log.Printf("Invalid GraphRef: %s", supergraphConfig.GraphRef)
+					break
+				}
+				graphID, variantID, err := parseGraphRef(supergraphConfig.GraphRef)
+				if err != nil {
+					log.Printf("Failed to parse GraphRef: %s", supergraphConfig.GraphRef)
+					break
+				}
+
+				// Fetch the schema for the graph
+				response, err := fetchSupergraphSdl(config, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey)
+				if err != nil {
+					log.Printf("Failed to fetch schema for graph %s: %v", supergraphConfig.GraphRef, err)
+					break
+				}
+				// Extract the schema from the response
+				schema := response.Data.RouterConfig.SupergraphSdl
+
+				// Update the cache
+				cacheKey := makeCacheKey(graphID, variantID, "SupergraphSdlQuery")
+				// Set the cache using the fetched schema
+				debugLog(enableDebug, "Updating SDL for GraphRef %s", supergraphConfig.GraphRef)
+				cache.Set(cacheKey, schema, config.Cache.Duration)
+
+				// Fetch the router license
+				licenseResponse, err := fetchRouterLicense(config, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey)
+				if err != nil {
+					log.Printf("Failed to fetch router license for graph %s: %v", supergraphConfig.GraphRef, err)
+					break
+				}
+				// Extract the license from the response
+				jwt := licenseResponse.Data.RouterEntitlements.Entitlement.Jwt
+
+				// Update the cache
+				cacheKey = makeCacheKey(graphID, variantID, "LicenseQuery")
+				// Set the cache using the fetched license
+				debugLog(enableDebug, "Updating license for GraphRef %s", supergraphConfig.GraphRef)
+				cache.Set(cacheKey, jwt, config.Cache.Duration)
+
+				// If successful, log the success
+				log.Printf("Successfully polled for graph %s", supergraphConfig.GraphRef)
+				success = true
 			}
-			graphID, variantID, err := parseGraphRef(supergraphConfig.GraphRef)
-			if err != nil {
-				log.Printf("Failed to parse GraphRef: %s", supergraphConfig.GraphRef)
-				continue
+			if !success {
+				log.Printf("Failed to poll uplink for graph %s after %d retries", supergraphConfig.GraphRef, config.Polling.RetryCount)
 			}
-
-			// Fetch the schema for the graph
-			response, err := fetchSupergraphSdl(config, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey)
-			if err != nil {
-				log.Printf("Failed to fetch schema for graph %s: %v", supergraphConfig.GraphRef, err)
-				continue
-			}
-			// Extract the schema from the response
-			schema := response.Data.RouterConfig.SupergraphSdl
-
-			// Update the cache
-			cacheKey := makeCacheKey(graphID, variantID, "SupergraphSdlQuery")
-			// Set the cache using the fetched schema
-			debugLog(enableDebug, "Updating SDL for GraphRef %s", supergraphConfig.GraphRef)
-			cache.Set(cacheKey, schema, config.Cache.Duration)
-
-			// Fetch the router license
-			licenseResponse, err := fetchRouterLicense(config, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey)
-			if err != nil {
-				log.Printf("Failed to fetch router license for graph %s: %v", supergraphConfig.GraphRef, err)
-				continue
-			}
-			// Extract the license from the response
-			jwt := licenseResponse.Data.RouterEntitlements.Entitlement.Jwt
-
-			// Update the cache
-			cacheKey = makeCacheKey(graphID, variantID, "LicenseQuery")
-			// Set the cache using the fetched license
-			debugLog(enableDebug, "Updating license for GraphRef %s", supergraphConfig.GraphRef)
-			cache.Set(cacheKey, jwt, config.Cache.Duration)
 		}
 	}
 }

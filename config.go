@@ -40,8 +40,9 @@ type UplinkConfig struct {
 
 // CacheConfig specifies the cache duration and max size.
 type CacheConfig struct {
-	Duration int `yaml:"duration"` // Duration to keep cached content, in seconds.
-	MaxSize  int `yaml:"maxSize"`  // Maximum size of the cache.
+	Enabled  bool `yaml:"enabled"`  // Whether caching is enabled.
+	Duration int  `yaml:"duration"` // Duration to keep cached content, in seconds.
+	MaxSize  int  `yaml:"maxSize"`  // Maximum size of the cache.
 }
 
 // WebhookConfig defines the configuration for webhook handling.
@@ -53,8 +54,9 @@ type WebhookConfig struct {
 
 // PollingConfig defines the configuration for polling from uplink.
 type PollingConfig struct {
-	Enabled  bool `yaml:"enabled"`  // Whether polling is enabled.
-	Interval int  `yaml:"interval"` // Interval for polling, in seconds.
+	Enabled    bool `yaml:"enabled"`    // Whether polling is enabled.
+	Interval   int  `yaml:"interval"`   // Interval for polling, in seconds.
+	RetryCount int  `yaml:"retryCount"` // Number of times to retry on polling failure.
 }
 
 // SupergraphConfig defines the list of graphs to use.

@@ -10,14 +10,16 @@ uplink:
     - "https://uplink.api.apollographql.com/"
     # - "https://aws.uplink.api.apollographql.com/"
 cache:
-  duration: 60 # Cache duration in seconds
+  enabled: true
+  duration: 60 # Cache duration in seconds, default is -1 (forever)
   maxSize: 1024
 supergraphs:
   - graphRef: "${APOLLO_GRAPH_REF}"
     apolloKey: "${APOLLO_KEY}"
 polling:
-  enabled: false
+  enabled: true
   interval: 10
+  retryCount: 5
 webhook:
   enabled: false
   path: "/webhook"
