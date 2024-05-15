@@ -165,14 +165,21 @@ func expandEnvInStruct(v reflect.Value) {
 			expandEnvInStruct(v.Index(i))
 		}
 	case reflect.Map:
+		newMap := reflect.MakeMap(v.Type())
 		for _, key := range v.MapKeys() {
 			val := v.MapIndex(key)
+			newKey := key
+			if key.Kind() == reflect.String {
+				newKey = reflect.ValueOf(os.ExpandEnv(key.String()))
+			}
 			if val.Kind() == reflect.String {
-				v.SetMapIndex(key, reflect.ValueOf(os.ExpandEnv(val.String())))
+				val = reflect.ValueOf(os.ExpandEnv(val.String()))
 			} else {
 				expandEnvInStruct(val)
 			}
+			newMap.SetMapIndex(newKey, val)
 		}
+		v.Set(newMap)
 	case reflect.String:
 		if v.CanSet() {
 			v.SetString(os.ExpandEnv(v.String()))

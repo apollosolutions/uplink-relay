@@ -14,7 +14,7 @@ cache:
   maxSize: 1024
 graphs:
   graphRefs:
-    "mattr-fed-workshop@current": "${APOLLO_KEY}"
+    "${APOLLO_GRAPH_REF}": "${APOLLO_KEY}"
 polling:
   enabled: true
   interval: 10

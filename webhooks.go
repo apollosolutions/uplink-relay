@@ -36,30 +36,35 @@ func webhookHandler(config *Config, cache *MemoryCache, httpClient *http.Client,
 			return
 		}
 
+		// Extract the signature algorithm and value
 		parts := strings.SplitN(signatureHeader, "=", 2)
 		if len(parts) != 2 || parts[0] != "sha256" {
 			http.Error(w, "Invalid signature", http.StatusBadRequest)
 			return
 		}
 
+		// Verify the signature
 		secret := config.Webhook.Secret
 		if secret == "" {
 			http.Error(w, "Webhook secret not configured", http.StatusBadRequest)
 			return
 		}
 
+		// Read the request body and compute the HMAC
 		mac := hmac.New(sha256.New, []byte(secret))
 		_, err := io.Copy(mac, r.Body)
 		if err != nil {
-			http.Error(w, "Failed to read request body: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("Failed to read request body: %v", err), http.StatusInternalServerError)
 			return
 		}
 
+		// Compare the computed HMAC with the expected HMAC
 		expectedMAC := hex.EncodeToString(mac.Sum(nil))
 		if !hmac.Equal([]byte(parts[1]), []byte(expectedMAC)) {
 			http.Error(w, "Invalid signature", http.StatusBadRequest)
 			return
 		}
+
 		// Parse the incoming webhook data
 		var data WebhookData
 		err = json.NewDecoder(r.Body).Decode(&data)
