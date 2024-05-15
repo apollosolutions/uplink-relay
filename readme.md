@@ -23,24 +23,56 @@ We may not respond to issues and pull requests at this time.
 
 ## Configuration
 
-Uplink Relay can be configured using a YAML configuration file. Here's an example:
+Uplink Relay can be configured using a YAML configuration file. Here's a complete example:
 
 ```yaml
 relay:
   address: "localhost:8080"
 uplink:
   timeout: 10
-  retryCount: 5
   urls:
     - "https://uplink.api.apollographql.com/"
     - "https://aws.uplink.api.apollographql.com/"
 cache:
   duration: 60 # Cache duration in seconds
   maxSize: 1024
+graphs:
+  graphRefs:
+    "${APOLLO_GRAPH_REF}": "${APOLLO_KEY}" # Add your graph refs and keys here, or use environment variables
+polling:
+  enabled: true
+  interval: 10
+webhook:
+  enabled: true
+  path: "/webhook"
+  secret: "${APOLLO_WEBHOOK_SECRET}"
+```
+
+## Apollo Router Configuration
+
+To use Uplink Relay with Apollo Router, you need to configure the `--apollo-uplink-endpoints` option to point to the Uplink Relay instance. Here's an example:
+
+```bash
+router --apollo-uplink-endpoints=http://localhost:8080
+```
+
+You can also use the `APOLLO_UPLINK_ENDPOINTS` environment variable:
+
+```bash
+export APOLLO_UPLINK_ENDPOINTS=http://localhost:8080
+router
 ```
 
 ## Docker
-You can also run Uplink Relay in a Docker container. Here's how to build and run the Docker image:
+You can also run Uplink Relay in a Docker container. 
+
+Here's how to use the pre-built Docker image:
+```
+docker run -p 8080:8080 ghcr.io/apollosolutions/uplink-relay:main
+```
+
+
+Here's how to build and run the Docker image:
 ```
 docker build -t uplink-relay .
 docker run -p 8080:8080 uplink-relay
