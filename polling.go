@@ -19,25 +19,25 @@ func startPolling(config *Config, cache *MemoryCache, httpClient *http.Client, e
 	defer ticker.Stop()
 
 	for range ticker.C {
-		for graphRef, graphApiKey := range config.Supergraphs.GraphRefs {
-			debugLog(enableDebug, "Polling for graph: %s", graphRef)
+		for _, supergraphConfig := range config.Supergraphs {
+			debugLog(enableDebug, "Polling for graph: %s", supergraphConfig.GraphRef)
 
 			// Split the graph into GraphID and VariantID
-			parts := strings.Split(graphRef, "@")
+			parts := strings.Split(supergraphConfig.GraphRef, "@")
 			if len(parts) != 2 {
-				log.Printf("Invalid GraphRef: %s", graphRef)
+				log.Printf("Invalid GraphRef: %s", supergraphConfig.GraphRef)
 				continue
 			}
-			graphID, variantID, err := parseGraphRef(graphRef)
+			graphID, variantID, err := parseGraphRef(supergraphConfig.GraphRef)
 			if err != nil {
-				log.Printf("Failed to parse GraphRef: %s", graphRef)
+				log.Printf("Failed to parse GraphRef: %s", supergraphConfig.GraphRef)
 				continue
 			}
 
 			// Fetch the schema for the graph
-			response, err := fetchSupergraphSdl(config, httpClient, graphRef, graphApiKey)
+			response, err := fetchSupergraphSdl(config, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey)
 			if err != nil {
-				log.Printf("Failed to fetch schema for graph %s: %v", graphRef, err)
+				log.Printf("Failed to fetch schema for graph %s: %v", supergraphConfig.GraphRef, err)
 				continue
 			}
 			// Extract the schema from the response
@@ -46,13 +46,13 @@ func startPolling(config *Config, cache *MemoryCache, httpClient *http.Client, e
 			// Update the cache
 			cacheKey := makeCacheKey(graphID, variantID, "SupergraphSdlQuery")
 			// Set the cache using the fetched schema
-			debugLog(enableDebug, "Updating SDL for GraphRef %s", graphRef)
+			debugLog(enableDebug, "Updating SDL for GraphRef %s", supergraphConfig.GraphRef)
 			cache.Set(cacheKey, schema, config.Cache.Duration)
 
 			// Fetch the router license
-			licenseResponse, err := fetchRouterLicense(config, httpClient, graphRef, graphApiKey)
+			licenseResponse, err := fetchRouterLicense(config, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey)
 			if err != nil {
-				log.Printf("Failed to fetch router license for graph %s: %v", graphRef, err)
+				log.Printf("Failed to fetch router license for graph %s: %v", supergraphConfig.GraphRef, err)
 				continue
 			}
 			// Extract the license from the response
@@ -61,7 +61,7 @@ func startPolling(config *Config, cache *MemoryCache, httpClient *http.Client, e
 			// Update the cache
 			cacheKey = makeCacheKey(graphID, variantID, "LicenseQuery")
 			// Set the cache using the fetched license
-			debugLog(enableDebug, "Updating license for GraphRef %s", graphRef)
+			debugLog(enableDebug, "Updating license for GraphRef %s", supergraphConfig.GraphRef)
 			cache.Set(cacheKey, jwt, config.Cache.Duration)
 		}
 	}

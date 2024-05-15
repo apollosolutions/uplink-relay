@@ -11,12 +11,12 @@ import (
 // Config represents the application's configuration structure,
 // housing Relay, Uplink, and Cache configurations.
 type Config struct {
-	Relay       RelayConfig      `yaml:"relay"`       // RelayConfig for incoming connections.
-	Uplink      UplinkConfig     `yaml:"uplink"`      // UplinkConfig for managing uplink configuration.
-	Cache       CacheConfig      `yaml:"cache"`       // CacheConfig for cache settings.
-	Supergraphs SupergraphConfig `yaml:"supergraphs"` // GraphConfig for supergraph settings.
-	Webhook     WebhookConfig    `yaml:"webhook"`     // WebhookConfig for webhook handling.
-	Polling     PollingConfig    `yaml:"polling"`     // PollingConfig for polling settings.
+	Relay       RelayConfig        `yaml:"relay"`       // RelayConfig for incoming connections.
+	Uplink      UplinkConfig       `yaml:"uplink"`      // UplinkConfig for managing uplink configuration.
+	Cache       CacheConfig        `yaml:"cache"`       // CacheConfig for cache settings.
+	Supergraphs []SupergraphConfig `yaml:"supergraphs"` // SupergraphConfig for supergraph settings.
+	Webhook     WebhookConfig      `yaml:"webhook"`     // WebhookConfig for webhook handling.
+	Polling     PollingConfig      `yaml:"polling"`     // PollingConfig for polling settings.
 }
 
 // RelayConfig defines the address the proxy server listens on.
@@ -59,9 +59,11 @@ type PollingConfig struct {
 
 // SupergraphConfig defines the list of graphs to use.
 type SupergraphConfig struct {
-	GraphRefs map[string]string `yaml:"graphRefs"` // List of graphs to use.
+	GraphRef  string `yaml:"graphRef"`
+	ApolloKey string `yaml:"apolloKey"`
 }
 
+// NewDefaultConfig creates a new default configuration.
 func NewDefaultConfig() *Config {
 	return &Config{
 		Relay: RelayConfig{
@@ -89,6 +91,7 @@ func NewDefaultConfig() *Config {
 	}
 }
 
+// MergeWithDefaultConfig merges the default configuration with the loaded configuration.
 func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableDebug *bool) *Config {
 	if loadedConfig.Relay.Address == "" {
 		loadedConfig.Relay.Address = defaultConfig.Relay.Address
@@ -114,8 +117,8 @@ func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableD
 		loadedConfig.Cache.MaxSize = defaultConfig.Cache.MaxSize
 	}
 
-	if len(loadedConfig.Supergraphs.GraphRefs) == 0 {
-		loadedConfig.Supergraphs.GraphRefs = defaultConfig.Supergraphs.GraphRefs
+	if len(loadedConfig.Supergraphs) == 0 {
+		loadedConfig.Supergraphs = defaultConfig.Supergraphs
 	}
 
 	if loadedConfig.Webhook.Path == "" {

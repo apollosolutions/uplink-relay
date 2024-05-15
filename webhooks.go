@@ -75,8 +75,8 @@ func webhookHandler(config *Config, cache *MemoryCache, httpClient *http.Client,
 
 		// Check if the variantID is in the list of graphs from the configuration
 		// webhook variantID is in the format of a GraphRef
-		if !contains(config.Supergraphs.GraphRefs, data.VariantID) {
-			http.Error(w, "Graph not in the list of graphs", http.StatusBadRequest)
+		if !containsGraph(config.Supergraphs, data.VariantID) {
+			http.Error(w, fmt.Sprintf("VariantID %s not found in the list of supergraphs", data.VariantID), http.StatusBadRequest)
 			return
 		}
 
@@ -116,8 +116,12 @@ func webhookHandler(config *Config, cache *MemoryCache, httpClient *http.Client,
 	}
 }
 
-// Helper function to check if a slice contains a string
-func contains(slice map[string]string, str string) bool {
-	_, ok := slice[str]
-	return ok
+// Helper function to check if a configs contains variantID
+func containsGraph(configs []SupergraphConfig, variantID string) bool {
+	for _, item := range configs {
+		if item.GraphRef == variantID {
+			return true
+		}
+	}
+	return false
 }
