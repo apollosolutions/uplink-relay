@@ -15,16 +15,24 @@ import (
 // main contains the main application logic.
 func main() {
 
+	// Initialize the loggerger.
+	// logger := makeLogger()
+
 	// Parse command-line flags.
 	configPath := flag.String("config", "config.yml", "Path to the configuration file")
 	enableDebug := flag.Bool("debug", false, "Enable debug logging")
 	flag.Parse()
 
+	defaultConfig := NewDefaultConfig()
+
 	// Load the application configuration.
-	config, err := LoadConfig(*configPath)
+	userConfig, err := LoadConfig(*configPath)
 	if err != nil {
 		log.Fatalf("Could not load configuration: %v", err)
 	}
+
+	// Merge the default and user configurations.
+	config := MergeWithDefaultConfig(defaultConfig, userConfig, enableDebug)
 
 	// Validate the loaded configuration.
 	if err := config.Validate(); err != nil {

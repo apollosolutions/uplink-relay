@@ -1,18 +1,20 @@
 relay:
   address: "localhost:8080"
-  tls:
-    cert: "./localhost.crt"
-    key: "./localhost.key"
+  # tls:
+  #   cert: "./localhost.crt"
+  #   key: "./localhost.key"
 uplink:
   timeout: 10
   retryCount: 5
   urls:
     - "https://uplink.api.apollographql.com/"
-    - "https://aws.uplink.api.apollographql.com/"
+    # - "https://aws.uplink.api.apollographql.com/"
 cache:
   duration: 60 # Cache duration in seconds
   maxSize: 1024
 graphs:
   graphRefs:
-    - "graph1@variant1"
-    - "graph2@variant2"
+    "mattr-fed-workshop@current": "${APOLLO_KEY}"
+polling:
+  enabled: true
+  interval: 10

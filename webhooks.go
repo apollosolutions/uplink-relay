@@ -78,11 +78,7 @@ func webhookHandler(config *Config, cache *MemoryCache, httpClient *http.Client,
 }
 
 // Helper function to check if a slice contains a string
-func contains(slice []string, str string) bool {
-	for _, v := range slice {
-		if v == str {
-			return true
-		}
-	}
-	return false
+func contains(slice map[string]string, str string) bool {
+	_, ok := slice[str]
+	return ok
 }

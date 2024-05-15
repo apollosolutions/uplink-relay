@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -62,4 +63,9 @@ func (c *MemoryCache) Set(key string, content string, duration int) {
 
 	c.items[key] = &CacheItem{Content: []byte(content), Expiration: expiration}
 	c.currentSize++
+}
+
+// makeCacheKey generates a cache key from the provided graphID, variantID, and operationName.
+func makeCacheKey(graphID, variantID, operationName string) string {
+	return fmt.Sprintf("%s:%s:%s", graphID, variantID, operationName)
 }

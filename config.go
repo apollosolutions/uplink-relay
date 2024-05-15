@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"reflect"
 
 	"gopkg.in/yaml.v3"
 )
@@ -58,21 +59,137 @@ type PollingConfig struct {
 
 // GraphConfig defines the list of graphs to use.
 type GraphConfig struct {
-	GraphRefs []string `yaml:"graphRefs"` // List of graphs to use.
+	GraphRefs map[string]string `yaml:"graphRefs"` // List of graphs to use.
+}
+
+func NewDefaultConfig() *Config {
+	return &Config{
+		Relay: RelayConfig{
+			Address: "localhost:8080",
+			TLS:     RelayTlsConfig{},
+		},
+		Uplink: UplinkConfig{
+			URLs:       []string{"http://localhost:8081"},
+			Timeout:    30,
+			RetryCount: -1,
+		},
+		Cache: CacheConfig{
+			Duration: -1,
+			MaxSize:  1000,
+		},
+		Webhook: WebhookConfig{
+			Enabled: false,
+			Path:    "/webhook",
+			Cache:   false,
+		},
+		Polling: PollingConfig{
+			Enabled:  false,
+			Interval: 60,
+		},
+	}
+}
+
+func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableDebug *bool) *Config {
+	if loadedConfig.Relay.Address == "" {
+		loadedConfig.Relay.Address = defaultConfig.Relay.Address
+	}
+
+	if len(loadedConfig.Uplink.URLs) == 0 {
+		loadedConfig.Uplink.URLs = defaultConfig.Uplink.URLs
+	}
+
+	if loadedConfig.Uplink.Timeout == 0 {
+		loadedConfig.Uplink.Timeout = defaultConfig.Uplink.Timeout
+	}
+
+	if loadedConfig.Uplink.RetryCount == -1 {
+		loadedConfig.Uplink.RetryCount = defaultConfig.Uplink.RetryCount
+	}
+
+	if loadedConfig.Cache.Duration == -1 {
+		loadedConfig.Cache.Duration = defaultConfig.Cache.Duration
+	}
+
+	if loadedConfig.Cache.MaxSize == 0 {
+		loadedConfig.Cache.MaxSize = defaultConfig.Cache.MaxSize
+	}
+
+	if len(loadedConfig.Graphs.GraphRefs) == 0 {
+		loadedConfig.Graphs.GraphRefs = defaultConfig.Graphs.GraphRefs
+	}
+
+	if loadedConfig.Webhook.Path == "" {
+		loadedConfig.Webhook.Path = defaultConfig.Webhook.Path
+	}
+
+	if loadedConfig.Polling.Interval == 0 {
+		loadedConfig.Polling.Interval = defaultConfig.Polling.Interval
+	}
+
+	// Log the final configuration
+	debugLog(enableDebug, "Uplink Relay configuration: %+v", loadedConfig)
+
+	return loadedConfig
 }
 
 // LoadConfig reads and unmarshals a YAML configuration file into a Config struct.
 func LoadConfig(configPath string) (*Config, error) {
-	data, err := os.ReadFile(configPath)
+	configFile, err := os.Open(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("error reading config file: %w", err)
+		return nil, err
 	}
+	defer configFile.Close()
+
+	decoder := yaml.NewDecoder(configFile)
+
 	var config Config
-	err = yaml.Unmarshal(data, &config)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshalling config YAML: %w", err)
+	if err := decoder.Decode(&config); err != nil {
+		return nil, err
 	}
+
+	expandEnvInStruct(reflect.ValueOf(&config))
+
 	return &config, nil
+}
+
+func expandEnvInStruct(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Ptr:
+		if v.IsNil() {
+			return
+		}
+		v = v.Elem()
+		expandEnvInStruct(v)
+	case reflect.Slice:
+		for i := 0; i < v.Len(); i++ {
+			expandEnvInStruct(v.Index(i))
+		}
+	case reflect.Map:
+		for _, key := range v.MapKeys() {
+			val := v.MapIndex(key)
+			if val.Kind() == reflect.String {
+				v.SetMapIndex(key, reflect.ValueOf(os.ExpandEnv(val.String())))
+			} else {
+				expandEnvInStruct(val)
+			}
+		}
+	case reflect.String:
+		if v.CanSet() {
+			v.SetString(os.ExpandEnv(v.String()))
+		}
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			field := v.Field(i)
+			switch field.Kind() {
+			case reflect.Ptr:
+				if !field.IsNil() {
+					expandEnvInStruct(field)
+				}
+			default:
+				expandEnvInStruct(field)
+			}
+		}
+	}
 }
 
 func (c *Config) Validate() error {
@@ -80,12 +197,12 @@ func (c *Config) Validate() error {
 	if c.Relay.Address == "" {
 		return fmt.Errorf("relay address cannot be empty")
 	}
-	if c.Relay.TLS.CertFile == "" {
-		return fmt.Errorf("relay certFile cannot be empty")
-	}
-	if c.Relay.TLS.KeyFile == "" {
-		return fmt.Errorf("relay keyFile cannot be empty")
-	}
+	// if c.Relay.TLS.CertFile == "" {
+	// 	return fmt.Errorf("relay certFile cannot be empty")
+	// }
+	// if c.Relay.TLS.KeyFile == "" {
+	// 	return fmt.Errorf("relay keyFile cannot be empty")
+	// }
 
 	// Validate Uplink configuration
 	if len(c.Uplink.URLs) == 0 {
