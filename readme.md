@@ -39,7 +39,7 @@ uplink:
 cache:
   duration: 60 # Cache duration in seconds
   maxSize: 1024
-graphs:
+supergraphs:
   graphRefs:
     "${APOLLO_GRAPH_REF}": "${APOLLO_KEY}" # Add your graph refs and keys here, or use environment variables
 polling:
