@@ -20,4 +20,14 @@
 # Go workspace file
 go.work
 go.work.sum
+
+# OSX
 .DS_Store
+
+# Environment variables file
+.env
+.envrc
+
+# Apollo Binary files
+relay
+router

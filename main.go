@@ -47,7 +47,7 @@ func main() {
 		redisClient := redis.NewClient(&redis.Options{
 			Addr:     config.Redis.Address,
 			Password: config.Redis.Password,
-			// DB:       config.Redis.Database,
+			DB:       config.Redis.Database,
 		})
 		cache = NewRedisCache(redisClient)
 	} else {

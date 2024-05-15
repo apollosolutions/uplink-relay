@@ -48,12 +48,10 @@ type CacheConfig struct {
 
 // RedisConfig defines the configuration for connecting to a Redis cache.
 type RedisConfig struct {
-	Enabled   bool   `yaml:"enabled"`   // Whether Redis caching is enabled.
-	Address   string `yaml:"address"`   // Address of the Redis server.
-	Password  string `yaml:"password"`  // Password for Redis authentication.
-	Timeout   string `yaml:"timeout"`   // Timeout for Redis requests.
-	TTL       string `yaml:"ttl"`       // Time-to-live for cached content.
-	Namespace string `yaml:"namespace"` // Namespace for Redis keys.
+	Enabled  bool   `yaml:"enabled"`  // Whether Redis caching is enabled.
+	Address  string `yaml:"address"`  // Address of the Redis server.
+	Password string `yaml:"password"` // Password for Redis authentication.
+	Database int    `yaml:"database"` // Database to use in the Redis server.
 }
 
 // WebhookConfig defines the configuration for webhook handling.
