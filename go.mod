@@ -1,4 +1,4 @@
-module apollographql/uplink/relay
+module apollosolutions/uplink-relay
 
 go 1.22.2
 

@@ -10,6 +10,7 @@ uplink:
     - "https://uplink.api.apollographql.com/"
     # - "https://aws.uplink.api.apollographql.com/"
 cache:
+  enabled: false
   duration: 60 # Cache duration in seconds, default is -1 (forever)
   maxSize: 1024
 # redis: 
@@ -17,7 +18,6 @@ cache:
 #   address: "redis://..."
 #   password: admin
 #   database: 0
-  namespace: "prefix"  # Optional
 supergraphs:
   - graphRef: "${APOLLO_GRAPH_REF}"
     apolloKey: "${APOLLO_KEY}"
