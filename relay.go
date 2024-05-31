@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -118,55 +119,47 @@ func parseRequest(r *http.Request) (UplinkRelayRequest, error) {
 }
 
 // Logs the request headers if debug mode is enabled.
-func debugRequestHeaders(enableDebug *bool, r *http.Request) {
-	if *enableDebug {
-		for name, values := range r.Header {
-			for _, value := range values {
-				log.Printf("Request header: %s = %s\n", name, value)
-			}
+func debugRequestHeaders(logger *slog.Logger, r *http.Request) {
+	for name, values := range r.Header {
+		for _, value := range values {
+			logger.Debug("Request header: %s = %s\n", name, value)
 		}
 	}
 }
 
 // Reads and logs the request body if debug mode is enabled.
 // It replaces the request body with a new buffer so it can be read again later.
-func debugRequestBody(enableDebug *bool, r *http.Request) {
-	if *enableDebug {
-		bodyBytes, err := io.ReadAll(r.Body)
-		if err != nil {
-			log.Printf("Failed to read request body: %v\n", err)
-		}
-		log.Printf("Request body: %s\n", bodyBytes)
-
-		// Replace the body so it can be read again later
-		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+func debugRequestBody(logger *slog.Logger, r *http.Request) {
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("Failed to read request body: %v\n", err)
 	}
+	log.Printf("Request body: %s\n", bodyBytes)
+
+	// Replace the body so it can be read again later
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 }
 
 // Logs the response headers if debug mode is enabled.
-func debugResponseHeaders(enableDebug *bool, headers http.Header) {
-	if *enableDebug {
-		for name, values := range headers {
-			for _, value := range values {
-				log.Printf("Response header: %s = %s\n", name, value)
-			}
+func debugResponseHeaders(logger *slog.Logger, headers http.Header) {
+	for name, values := range headers {
+		for _, value := range values {
+			logger.Debug("Response header: %s = %s\n", name, value)
 		}
 	}
 }
 
 // Reads and logs the response body if debug mode is enabled.
 // It replaces the body with a new buffer so it can be read again later.
-func debugResponseBody(enableDebug *bool, r *http.Response) {
-	if *enableDebug {
-		bodyBytes, err := io.ReadAll(r.Body)
-		if err != nil {
-			log.Printf("Failed to read response body: %v\n", err)
-		}
-		log.Printf("Response body: %s\n", bodyBytes)
-
-		// Replace the body so it can be read again later
-		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+func debugResponseBody(logger *slog.Logger, r *http.Response) {
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("Failed to read response body: %v\n", err)
 	}
+	log.Printf("Response body: %s\n", bodyBytes)
+
+	// Replace the body so it can be read again later
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 }
 
 // Parses the graph_ref into graphID and variantID.
@@ -179,13 +172,13 @@ func parseGraphRef(graphRef string) (string, string, error) {
 }
 
 // Modifies the proxied response before it is returned to the client.
-func modifyProxiedResponse(config *Config, cache Cache, cacheKey string, uplinkRequest UplinkRelayRequest, enableDebug *bool) func(*http.Response) error {
+func modifyProxiedResponse(config *Config, cache Cache, cacheKey string, uplinkRequest UplinkRelayRequest, logger *slog.Logger) func(*http.Response) error {
 	return func(resp *http.Response) error {
 		// Debug log the response headers
-		debugResponseHeaders(enableDebug, resp.Header)
+		debugResponseHeaders(logger, resp.Header)
 
 		// Debug log the response body
-		debugResponseBody(enableDebug, resp)
+		debugResponseBody(logger, resp)
 
 		// Get the response based on the operation name
 		responseStruct, ok := uplinkRelayResponses[uplinkRequest.OperationName]
@@ -221,7 +214,7 @@ func modifyProxiedResponse(config *Config, cache Cache, cacheKey string, uplinkR
 			schema := uplinkResponse.Data.RouterConfig.SupergraphSdl
 
 			// Log the UplinkResponse
-			debugLog(enableDebug, "SupergraphSdlQuery response: %+v", uplinkResponse)
+			logger.Debug("SupergraphSdlQuery response: %+v", uplinkResponse)
 
 			// Cache the response for future requests.
 			cache.Set(cacheKey, schema, config.Cache.Duration)
@@ -237,11 +230,11 @@ func modifyProxiedResponse(config *Config, cache Cache, cacheKey string, uplinkR
 			jwt := uplinkResponse.Data.RouterEntitlements.Entitlement.Jwt
 
 			// Log the LicenseQueryResponse
-			debugLog(enableDebug, "LicenseQuery response: %+v", uplinkResponse)
+			logger.Debug("LicenseQuery response: %+v", uplinkResponse)
 
 			// Cache the response for future requests, if caching is enabled
 			if config.Cache.Enabled {
-				debugLog(enableDebug, "Caching JWT for %s", cacheKey)
+				logger.Debug("Caching JWT for %s", cacheKey)
 				cache.Set(cacheKey, jwt, config.Cache.Duration)
 			}
 
@@ -251,21 +244,21 @@ func modifyProxiedResponse(config *Config, cache Cache, cacheKey string, uplinkR
 		resp.Body = io.NopCloser(bytes.NewBuffer(responseBody))
 
 		// Log the proxied response
-		debugResponseBody(enableDebug, resp)
+		debugResponseBody(logger, resp)
 
 		return nil
 	}
 }
 
 // Creates a reverse proxy to the target URL.
-func makeProxy(config *Config, cache Cache, httpClient *http.Client, enableDebug *bool) func(*url.URL, string, UplinkRelayRequest) *httputil.ReverseProxy {
+func makeProxy(config *Config, cache Cache, httpClient *http.Client, logger *slog.Logger) func(*url.URL, string, UplinkRelayRequest) *httputil.ReverseProxy {
 	return func(targetURL *url.URL, cacheKey string, uplinkRequest UplinkRelayRequest) *httputil.ReverseProxy {
 		proxy := httputil.NewSingleHostReverseProxy(targetURL)
 		proxy.Transport = httpClient.Transport
 		proxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, err error) {
 			log.Printf("HTTP proxy error: %v\n", err)
 		}
-		proxy.ModifyResponse = modifyProxiedResponse(config, cache, cacheKey, uplinkRequest, enableDebug)
+		proxy.ModifyResponse = modifyProxiedResponse(config, cache, cacheKey, uplinkRequest, logger)
 		return proxy
 	}
 }
@@ -280,7 +273,7 @@ func parseUrl(target string) (*url.URL, error) {
 }
 
 // Handles a cache hit by returning the cached response.
-func handleCacheHit(config *Config, cache Cache, client *http.Client, cacheKey string, content []byte, enableDebug *bool) func(w http.ResponseWriter, r *http.Request) error {
+func handleCacheHit(config *Config, cache Cache, client *http.Client, cacheKey string, content []byte, logger *slog.Logger) func(w http.ResponseWriter, r *http.Request) error {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		var response interface{}
 
@@ -333,14 +326,14 @@ func handleCacheHit(config *Config, cache Cache, client *http.Client, cacheKey s
 		w.Header().Set("X-Cache-Hit", "true")
 
 		// Log the response
-		debugLog(enableDebug, "Cached Response: %s", responseBody)
+		logger.Debug("Cached Response: %s", responseBody)
 
 		return nil
 	}
 }
 
 // Handles a cache miss by proxying the request to the uplink service.
-func handleCacheMiss(config *Config, cache Cache, httpClient *http.Client, rrSelector *RoundRobinSelector, cacheKey string, uplinkRequest UplinkRelayRequest, enableDebug *bool) func(w http.ResponseWriter, r *http.Request) error {
+func handleCacheMiss(config *Config, cache Cache, httpClient *http.Client, rrSelector *RoundRobinSelector, cacheKey string, uplinkRequest UplinkRelayRequest, logger *slog.Logger) func(w http.ResponseWriter, r *http.Request) error {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		// Configure the reverse proxy for the chosen uplink.
 		rrUrl := rrSelector.Next()
@@ -351,7 +344,7 @@ func handleCacheMiss(config *Config, cache Cache, httpClient *http.Client, rrSel
 		}
 
 		// Create a new reverse proxy to uplink
-		proxy := makeProxy(config, cache, httpClient, enableDebug)(uplinkUrl, cacheKey, uplinkRequest)
+		proxy := makeProxy(config, cache, httpClient, logger)(uplinkUrl, cacheKey, uplinkRequest)
 
 		// Serve the proxied request
 		proxy.ServeHTTP(w, r)
@@ -361,16 +354,16 @@ func handleCacheMiss(config *Config, cache Cache, httpClient *http.Client, rrSel
 }
 
 // Handles requests to the relay endpoint.
-func relayHandler(config *Config, cache Cache, rrSelector *RoundRobinSelector, httpClient *http.Client, enableDebug *bool) http.HandlerFunc {
+func relayHandler(config *Config, cache Cache, rrSelector *RoundRobinSelector, httpClient *http.Client, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Debug log the request
-		debugLog(enableDebug, "Received request: %s %s %s", r.Method, r.URL.Path, r.Header)
+		logger.Debug("Received request: %s %s %s", r.Method, r.URL.Path, r.Header)
 
 		// Debug log the request heaaders
-		debugRequestHeaders(enableDebug, r)
+		debugRequestHeaders(logger, r)
 
 		// Debug log the request body
-		debugRequestBody(enableDebug, r)
+		debugRequestBody(logger, r)
 
 		// Parse the uplink request body
 		uplinkRequest, uplinkRequestErr := parseRequest(r)
@@ -401,7 +394,7 @@ func relayHandler(config *Config, cache Cache, rrSelector *RoundRobinSelector, h
 			if cacheContent, keyFound := cache.Get(cacheKey); keyFound {
 				// Handle the cache hit
 				log.Printf("Cache hit for %s\n", cacheKey)
-				handleCacheHit(config, cache, httpClient, cacheKey, cacheContent, enableDebug)(w, r)
+				handleCacheHit(config, cache, httpClient, cacheKey, cacheContent, logger)(w, r)
 				return
 			}
 
@@ -413,17 +406,17 @@ func relayHandler(config *Config, cache Cache, rrSelector *RoundRobinSelector, h
 
 		success := false
 		for attempt := 0; attempt <= config.Uplink.RetryCount && !success; attempt++ {
-			err := handleCacheMiss(config, cache, httpClient, rrSelector, cacheKey, uplinkRequest, enableDebug)(w, r)
+			err := handleCacheMiss(config, cache, httpClient, rrSelector, cacheKey, uplinkRequest, logger)(w, r)
 			if err != nil {
-				log.Printf("Request %d to uplink failed: %v", attempt, err)
+				logger.Error("Request %d to uplink failed: %v", attempt, err)
 				if attempt == config.Uplink.RetryCount {
-					log.Printf("Failed to proxy request after %d attempts: %v", config.Uplink.RetryCount, err)
+					logger.Error("Failed to proxy request after %d attempts: %v", config.Uplink.RetryCount, err)
 					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 					return
 				}
-				log.Printf("Retrying...")
+				logger.Info("Retrying...")
 			} else {
-				log.Printf("Successfully proxied request for %s\n", cacheKey)
+				logger.Info("Successfully proxied request for %s\n", cacheKey)
 				success = true
 				break
 			}

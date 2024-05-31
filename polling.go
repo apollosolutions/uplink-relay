@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 )
 
-func startPolling(config *Config, cache Cache, httpClient *http.Client, enableDebug *bool) {
+// startPolling starts polling for updates at the specified interval.
+func startPolling(config *Config, cache Cache, httpClient *http.Client, logger *slog.Logger) {
 	// Log when polling starts
-	debugLog(enableDebug, "Polling started")
+	logger.Debug("Polling started")
 
 	// Create a new ticker with the polling interval
 	ticker := time.NewTicker(time.Duration(config.Polling.Interval) * time.Second)
@@ -26,7 +28,7 @@ func startPolling(config *Config, cache Cache, httpClient *http.Client, enableDe
 			// Poll for the graph
 			success := false
 			for i := 0; i < config.Polling.RetryCount && !success; i++ {
-				debugLog(enableDebug, "Polling for graph: %s", supergraphConfig.GraphRef)
+				logger.Debug("Polling for graph: %s", supergraphConfig.GraphRef)
 
 				// Split the graph into GraphID and VariantID
 				parts := strings.Split(supergraphConfig.GraphRef, "@")
@@ -52,7 +54,7 @@ func startPolling(config *Config, cache Cache, httpClient *http.Client, enableDe
 				// Update the cache
 				cacheKey := makeCacheKey(graphID, variantID, "SupergraphSdlQuery")
 				// Set the cache using the fetched schema
-				debugLog(enableDebug, "Updating SDL for GraphRef %s", supergraphConfig.GraphRef)
+				logger.Debug("Updating SDL for GraphRef %s", supergraphConfig.GraphRef)
 				cache.Set(cacheKey, schema, config.Cache.Duration)
 
 				// Fetch the router license
@@ -67,7 +69,7 @@ func startPolling(config *Config, cache Cache, httpClient *http.Client, enableDe
 				// Update the cache
 				cacheKey = makeCacheKey(graphID, variantID, "LicenseQuery")
 				// Set the cache using the fetched license
-				debugLog(enableDebug, "Updating license for GraphRef %s", supergraphConfig.GraphRef)
+				logger.Debug("Updating license for GraphRef %s", supergraphConfig.GraphRef)
 				cache.Set(cacheKey, jwt, config.Cache.Duration)
 
 				// If successful, log the success
@@ -81,6 +83,7 @@ func startPolling(config *Config, cache Cache, httpClient *http.Client, enableDe
 	}
 }
 
+// fetchSupergraphSdl fetches the supergraph SDL for the specified graph.
 func fetchSupergraphSdl(config *Config, httpClient *http.Client, graphRef string, apiKey string) (*UplinkSupergraphSdlResponse, error) {
 	// Prepare the request body
 	requestBody, err := json.Marshal(UplinkRelayRequest{
@@ -174,6 +177,7 @@ func fetchSupergraphSdl(config *Config, httpClient *http.Client, graphRef string
 	return &response, nil
 }
 
+// fetchRouterLicense fetches the router license for the specified graph.
 func fetchRouterLicense(config *Config, httpClient *http.Client, graphRef string, apiKey string) (*UplinkLicenseResponse, error) {
 	// Define the request body
 	requestBody, err := json.Marshal(UplinkRelayRequest{

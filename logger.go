@@ -5,8 +5,19 @@ import (
 	"os"
 )
 
-func makeLogger() *slog.Logger {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+// makeLogger creates a new logger instance.
+func makeLogger(enableDebug *bool) *slog.Logger {
+	lvl := new(slog.LevelVar)
+
+	if *enableDebug {
+		lvl.Set(slog.LevelDebug)
+	} else {
+		lvl.Set(slog.LevelInfo)
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: lvl,
+	}))
 	slog.SetDefault(logger)
 
 	return logger

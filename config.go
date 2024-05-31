@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"reflect"
 
@@ -103,7 +104,7 @@ func NewDefaultConfig() *Config {
 }
 
 // MergeWithDefaultConfig merges the default configuration with the loaded configuration.
-func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableDebug *bool) *Config {
+func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableDebug *bool, logger *slog.Logger) *Config {
 	if loadedConfig.Relay.Address == "" {
 		loadedConfig.Relay.Address = defaultConfig.Relay.Address
 	}
@@ -141,7 +142,7 @@ func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableD
 	}
 
 	// Log the final configuration
-	debugLog(enableDebug, "Uplink Relay configuration: %+v", loadedConfig)
+	logger.Debug("Uplink Relay configuration: %+v", loadedConfig)
 
 	return loadedConfig
 }
@@ -166,6 +167,11 @@ func LoadConfig(configPath string) (*Config, error) {
 	return &config, nil
 }
 
+// expandEnvInStruct expands environment variables in a struct.
+// It recursively traverses the struct and expands environment variables in string fields.
+// It also expands environment variables in map keys.
+//
+// We use this to expand environment variables in the configuration file.
 func expandEnvInStruct(v reflect.Value) {
 	switch v.Kind() {
 	case reflect.Ptr:
@@ -213,17 +219,12 @@ func expandEnvInStruct(v reflect.Value) {
 	}
 }
 
+// Validate validates the configuration.
 func (c *Config) Validate() error {
 	// Validate Relay configuration
 	if c.Relay.Address == "" {
 		return fmt.Errorf("relay address cannot be empty")
 	}
-	// if c.Relay.TLS.CertFile == "" {
-	// 	return fmt.Errorf("relay certFile cannot be empty")
-	// }
-	// if c.Relay.TLS.KeyFile == "" {
-	// 	return fmt.Errorf("relay keyFile cannot be empty")
-	// }
 
 	// Validate Uplink configuration
 	if len(c.Uplink.URLs) == 0 {
