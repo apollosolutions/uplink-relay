@@ -154,9 +154,9 @@ func debugResponseHeaders(logger *slog.Logger, headers http.Header) {
 func debugResponseBody(logger *slog.Logger, r *http.Response) {
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("Failed to read response body: %v\n", err)
+		logger.Error("Failed to read response body: %v\n", err)
 	}
-	log.Printf("Response body: %s\n", bodyBytes)
+	logger.Info("Response Body", "body", bodyBytes)
 
 	// Replace the body so it can be read again later
 	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
