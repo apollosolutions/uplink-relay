@@ -4,7 +4,6 @@ package main
 
 import (
 	"flag"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -95,7 +94,8 @@ func main() {
 	// Start the server and log its address.
 	server, err := Proxy.StartServer(config, logger)
 	if err != nil {
-		log.Fatalf("%v\n", err)
+		logger.Error(err.Error())
+		os.Exit(1)
 	}
 
 	// Create a channel to listen for interrupt signals.
