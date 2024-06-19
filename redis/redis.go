@@ -2,7 +2,6 @@ package redis
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/go-redis/redis"
@@ -21,7 +20,7 @@ func (c *RedisCache) Get(key string) ([]byte, bool) {
 	if err == redis.Nil {
 		return nil, false
 	} else if err != nil {
-		log.Printf("Failed to get key %s: %v", key, err)
+		return nil, false
 	}
 	return []byte(val), true
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -148,7 +147,7 @@ func fetchSupergraphSdl(config *Config.Config, httpClient *http.Client, graphRef
 	// Send req using http Client
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		log.Printf("Error on response.\n[ERROR] - %v", err)
+		logger.Error("Error on response.\n[ERROR] - %v", err)
 		return nil, err
 	}
 
