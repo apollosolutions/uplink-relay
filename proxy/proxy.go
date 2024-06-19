@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"bytes"
@@ -13,15 +13,19 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	Cache "apollosolutions/uplink-relay/cache"
+	Config "apollosolutions/uplink-relay/config"
+	Uplink "apollosolutions/uplink-relay/uplink"
 )
 
-// Register handlers for relay routes.
+// Register handlers for proxy routes.
 func RegisterHandlers(route string, handler http.HandlerFunc) {
 	http.HandleFunc(route, handler)
 }
 
 // StartServer starts the HTTP server with the given address and handler.
-func StartServer(config *Config) (*http.Server, error) {
+func StartServer(config *Config.Config) (*http.Server, error) {
 	address := config.Relay.Address
 	log.Printf("Starting Uplink Relay  🛰  at %s\n", address)
 	server := &http.Server{Addr: address, Handler: http.DefaultServeMux}
@@ -163,7 +167,7 @@ func debugResponseBody(logger *slog.Logger, r *http.Response) {
 }
 
 // Parses the graph_ref into graphID and variantID.
-func parseGraphRef(graphRef string) (string, string, error) {
+func ParseGraphRef(graphRef string) (string, string, error) {
 	graphParts := strings.Split(graphRef, "@")
 	if len(graphParts) != 2 {
 		return "", "", fmt.Errorf("invalid graph_ref: %s", graphRef)
@@ -172,7 +176,7 @@ func parseGraphRef(graphRef string) (string, string, error) {
 }
 
 // Modifies the proxied response before it is returned to the client.
-func modifyProxiedResponse(config *Config, cache Cache, cacheKey string, uplinkRequest UplinkRelayRequest, logger *slog.Logger) func(*http.Response) error {
+func modifyProxiedResponse(config *Config.Config, cache Cache.Cache, cacheKey string, uplinkRequest UplinkRelayRequest, logger *slog.Logger) func(*http.Response) error {
 	return func(resp *http.Response) error {
 		// Debug log the response headers
 		debugResponseHeaders(logger, resp.Header)
@@ -251,7 +255,7 @@ func modifyProxiedResponse(config *Config, cache Cache, cacheKey string, uplinkR
 }
 
 // Creates a reverse proxy to the target URL.
-func makeProxy(config *Config, cache Cache, httpClient *http.Client, logger *slog.Logger) func(*url.URL, string, UplinkRelayRequest) *httputil.ReverseProxy {
+func makeProxy(config *Config.Config, cache Cache.Cache, httpClient *http.Client, logger *slog.Logger) func(*url.URL, string, UplinkRelayRequest) *httputil.ReverseProxy {
 	return func(targetURL *url.URL, cacheKey string, uplinkRequest UplinkRelayRequest) *httputil.ReverseProxy {
 		proxy := httputil.NewSingleHostReverseProxy(targetURL)
 		proxy.Transport = httpClient.Transport
@@ -273,7 +277,7 @@ func parseUrl(target string) (*url.URL, error) {
 }
 
 // Handles a cache hit by returning the cached response.
-func handleCacheHit(config *Config, cache Cache, client *http.Client, cacheKey string, content []byte, logger *slog.Logger) func(w http.ResponseWriter, r *http.Request) error {
+func handleCacheHit(config *Config.Config, cache Cache.Cache, client *http.Client, cacheKey string, content []byte, logger *slog.Logger) func(w http.ResponseWriter, r *http.Request) error {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		var response interface{}
 
@@ -333,7 +337,7 @@ func handleCacheHit(config *Config, cache Cache, client *http.Client, cacheKey s
 }
 
 // Handles a cache miss by proxying the request to the uplink service.
-func handleCacheMiss(config *Config, cache Cache, httpClient *http.Client, rrSelector *RoundRobinSelector, cacheKey string, uplinkRequest UplinkRelayRequest, logger *slog.Logger) func(w http.ResponseWriter, r *http.Request) error {
+func handleCacheMiss(config *Config.Config, cache Cache.Cache, httpClient *http.Client, rrSelector *Uplink.RoundRobinSelector, cacheKey string, uplinkRequest UplinkRelayRequest, logger *slog.Logger) func(w http.ResponseWriter, r *http.Request) error {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		// Configure the reverse proxy for the chosen uplink.
 		rrUrl := rrSelector.Next()
@@ -354,7 +358,7 @@ func handleCacheMiss(config *Config, cache Cache, httpClient *http.Client, rrSel
 }
 
 // Handles requests to the relay endpoint.
-func relayHandler(config *Config, cache Cache, rrSelector *RoundRobinSelector, httpClient *http.Client, logger *slog.Logger) http.HandlerFunc {
+func RelayHandler(config *Config.Config, cache Cache.Cache, rrSelector *Uplink.RoundRobinSelector, httpClient *http.Client, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Debug log the request
 		logger.Debug("Received request: %s %s %s", r.Method, r.URL.Path, r.Header)
@@ -374,7 +378,7 @@ func relayHandler(config *Config, cache Cache, rrSelector *RoundRobinSelector, h
 		}
 
 		// Parse the GraphRef from the request
-		graphID, variantID, graphRefErr := parseGraphRef(uplinkRequest.Variables["graph_ref"].(string))
+		graphID, variantID, graphRefErr := ParseGraphRef(uplinkRequest.Variables["graph_ref"].(string))
 		if graphRefErr != nil {
 			log.Println("Failed to parse GraphRef from request body")
 			http.Error(w, "Bad Request", http.StatusBadRequest)
@@ -385,7 +389,7 @@ func relayHandler(config *Config, cache Cache, rrSelector *RoundRobinSelector, h
 		operationName := uplinkRequest.OperationName
 
 		// Make the cache key using the graphID, variantID, and operationName
-		cacheKey := makeCacheKey(graphID, variantID, operationName)
+		cacheKey := Cache.MakeCacheKey(graphID, variantID, operationName)
 
 		// If cache is enabled, attempt to retrieve the response from the cache
 		if config.Cache.Enabled {

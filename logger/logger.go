@@ -1,4 +1,4 @@
-package main
+package logger
 
 import (
 	"log/slog"
@@ -6,7 +6,7 @@ import (
 )
 
 // makeLogger creates a new logger instance.
-func makeLogger(enableDebug *bool) *slog.Logger {
+func MakeLogger(enableDebug *bool) *slog.Logger {
 	lvl := new(slog.LevelVar)
 
 	if *enableDebug {

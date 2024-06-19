@@ -1,4 +1,4 @@
-package main
+package webhooks
 
 import (
 	"crypto/hmac"
@@ -12,6 +12,10 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	Cache "apollosolutions/uplink-relay/cache"
+	Config "apollosolutions/uplink-relay/config"
+	Proxy "apollosolutions/uplink-relay/proxy"
 )
 
 type SchemaChange struct {
@@ -29,7 +33,7 @@ type WebhookData struct {
 	Timestamp          time.Time      `json:"timestamp"`
 }
 
-func webhookHandler(config *Config, cache Cache, httpClient *http.Client, logger *slog.Logger) http.HandlerFunc {
+func WebhookHandler(config *Config.Config, cache Cache.Cache, httpClient *http.Client, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Verify the request signature
 		signatureHeader := r.Header.Get("x-apollo-signature")
@@ -100,7 +104,7 @@ func webhookHandler(config *Config, cache Cache, httpClient *http.Client, logger
 		schema := string(response)
 
 		// Parse the GraphID and VariantID from the webhook data
-		graphID, variantID, err := parseGraphRef(data.VariantID)
+		graphID, variantID, err := Proxy.ParseGraphRef(data.VariantID)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to parse variantID from webhook: %s", data.VariantID), http.StatusInternalServerError)
 			return
@@ -108,7 +112,7 @@ func webhookHandler(config *Config, cache Cache, httpClient *http.Client, logger
 
 		if config.Cache.Enabled {
 			// Create a cache key using the GraphID, VariantID
-			cacheKey := makeCacheKey(graphID, variantID, "SupergraphSdlQuery")
+			cacheKey := Cache.MakeCacheKey(graphID, variantID, "SupergraphSdlQuery")
 
 			// Update the cache using the fetched schema
 			cache.Set(cacheKey, schema, config.Cache.Duration)
@@ -123,7 +127,7 @@ func webhookHandler(config *Config, cache Cache, httpClient *http.Client, logger
 }
 
 // Helper function to check if a configs contains variantID
-func containsGraph(configs []SupergraphConfig, variantID string) bool {
+func containsGraph(configs []Config.SupergraphConfig, variantID string) bool {
 	for _, item := range configs {
 		if item.GraphRef == variantID {
 			return true
