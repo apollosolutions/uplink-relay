@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -117,7 +116,7 @@ func WebhookHandler(config *Config.Config, cache Cache.Cache, httpClient *http.C
 			// Update the cache using the fetched schema
 			cache.Set(cacheKey, schema, config.Cache.Duration)
 		} else {
-			log.Printf("Cache is disabled, skipping cache update for GraphID %s, VariantID %s", graphID, variantID)
+			logger.Info("Cache is disabled, skipping cache update for GraphID %s, VariantID %s", graphID, variantID)
 		}
 
 		// Send a response back to the webhook sender
