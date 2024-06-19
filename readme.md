@@ -77,6 +77,6 @@ docker run -p 8080:8080 ghcr.io/apollosolutions/uplink-relay:main
 
 Here's how to build and run the Docker image:
 ```
-docker build -t uplink-relay .
-docker run -p 8080:8080 uplink-relay
+docker build -t relay .
+docker run -p 8080:8080 relay
 ```
