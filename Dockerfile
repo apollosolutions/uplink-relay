@@ -2,7 +2,7 @@
 FROM golang:latest
 
 # Add Maintainer Info
-LABEL maintainer="Your Name <your.email@example.com>"
+LABEL maintainer="Apollo GraphQL Solutions"
 
 # Set the Current Working Directory inside the container
 WORKDIR /app
