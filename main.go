@@ -93,7 +93,7 @@ func main() {
 	}
 
 	// Start the server and log its address.
-	server, err := Proxy.StartServer(config)
+	server, err := Proxy.StartServer(config, logger)
 	if err != nil {
 		log.Fatalf("%v\n", err)
 	}
@@ -106,5 +106,5 @@ func main() {
 	<-stop
 
 	// Shut down the server
-	Proxy.ShutdownServer(server)
+	Proxy.ShutdownServer(server, logger)
 }
