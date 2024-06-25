@@ -120,7 +120,6 @@ func WebhookHandler(config *config.Config, systemCache cache.Cache, httpClient *
 		if config.Cache.Enabled {
 			// Create a cache key using the GraphID, VariantID
 			cacheKey := cache.MakeCacheKey(graphID, variantID, "SupergraphSdlQuery")
-			fmt.Println(cacheKey)
 			// Update the cache using the fetched schema
 			systemCache.Set(cacheKey, schema, config.Cache.Duration)
 		} else {

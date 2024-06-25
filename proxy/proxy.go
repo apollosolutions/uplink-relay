@@ -110,7 +110,6 @@ func parseRequest(r *http.Request) (UplinkRelayRequest, error) {
 		err := fmt.Errorf("failed to read request body: %w", err)
 		return requestBody, err
 	}
-	println(string(body))
 	err = json.Unmarshal(body, &requestBody)
 	if err != nil {
 		err := fmt.Errorf("failed to unmarshal request body: %w", err)
