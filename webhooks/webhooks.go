@@ -1,6 +1,7 @@
 package webhooks
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -12,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	Cache "apollosolutions/uplink-relay/cache"
-	Config "apollosolutions/uplink-relay/config"
-	Proxy "apollosolutions/uplink-relay/proxy"
+	"apollosolutions/uplink-relay/cache"
+	"apollosolutions/uplink-relay/config"
+	"apollosolutions/uplink-relay/proxy"
 )
 
 type SchemaChange struct {
@@ -32,7 +33,7 @@ type WebhookData struct {
 	Timestamp          time.Time      `json:"timestamp"`
 }
 
-func WebhookHandler(config *Config.Config, cache Cache.Cache, httpClient *http.Client, logger *slog.Logger) http.HandlerFunc {
+func WebhookHandler(config *config.Config, systemCache cache.Cache, httpClient *http.Client, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Verify the request signature
 		signatureHeader := r.Header.Get("x-apollo-signature")
@@ -55,9 +56,16 @@ func WebhookHandler(config *Config.Config, cache Cache.Cache, httpClient *http.C
 			return
 		}
 
+		body, err := io.ReadAll(r.Body)
+		defer r.Body.Close()
+		if err != nil {
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
+		}
+
 		// Read the request body and compute the HMAC
 		mac := hmac.New(sha256.New, []byte(secret))
-		_, err := io.Copy(mac, r.Body)
+		_, err = io.Copy(mac, bytes.NewReader(body))
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to read request body: %v", err), http.StatusInternalServerError)
 			return
@@ -72,7 +80,7 @@ func WebhookHandler(config *Config.Config, cache Cache.Cache, httpClient *http.C
 
 		// Parse the incoming webhook data
 		var data WebhookData
-		err = json.NewDecoder(r.Body).Decode(&data)
+		err = json.Unmarshal(body, &data)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -103,7 +111,7 @@ func WebhookHandler(config *Config.Config, cache Cache.Cache, httpClient *http.C
 		schema := string(response)
 
 		// Parse the GraphID and VariantID from the webhook data
-		graphID, variantID, err := Proxy.ParseGraphRef(data.VariantID)
+		graphID, variantID, err := proxy.ParseGraphRef(data.VariantID)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to parse variantID from webhook: %s", data.VariantID), http.StatusInternalServerError)
 			return
@@ -111,10 +119,10 @@ func WebhookHandler(config *Config.Config, cache Cache.Cache, httpClient *http.C
 
 		if config.Cache.Enabled {
 			// Create a cache key using the GraphID, VariantID
-			cacheKey := Cache.MakeCacheKey(graphID, variantID, "SupergraphSdlQuery")
-
+			cacheKey := cache.MakeCacheKey(graphID, variantID, "SupergraphSdlQuery")
+			fmt.Println(cacheKey)
 			// Update the cache using the fetched schema
-			cache.Set(cacheKey, schema, config.Cache.Duration)
+			systemCache.Set(cacheKey, schema, config.Cache.Duration)
 		} else {
 			logger.Info("Cache is disabled, skipping cache update for GraphID %s, VariantID %s", graphID, variantID)
 		}
@@ -126,7 +134,7 @@ func WebhookHandler(config *Config.Config, cache Cache.Cache, httpClient *http.C
 }
 
 // Helper function to check if a configs contains variantID
-func containsGraph(configs []Config.SupergraphConfig, variantID string) bool {
+func containsGraph(configs []config.SupergraphConfig, variantID string) bool {
 	for _, item := range configs {
 		if item.GraphRef == variantID {
 			return true

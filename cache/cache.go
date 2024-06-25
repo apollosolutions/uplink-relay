@@ -35,8 +35,13 @@ func NewMemoryCache(maxItems int) *MemoryCache {
 func (c *MemoryCache) Get(key string) ([]byte, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+
 	item, found := c.items[key]
-	if !found || item.Expiration.Before(time.Now()) {
+
+	// If the item is not found or has expired, return a cache miss.
+	// The special case of time.Unix(1<<63-1, 0) is used to indicate that an item never expires- and
+	// time.Before will always return true for this case.
+	if !found || (item.Expiration.Before(time.Now()) && item.Expiration != time.Unix(1<<63-1, 0)) {
 		return nil, false
 	}
 	return item.Content, true
