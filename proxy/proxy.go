@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	Cache "apollosolutions/uplink-relay/cache"
-	Config "apollosolutions/uplink-relay/config"
-	Uplink "apollosolutions/uplink-relay/uplink"
+	"apollosolutions/uplink-relay/cache"
+	"apollosolutions/uplink-relay/config"
+	"apollosolutions/uplink-relay/uplink"
 )
 
 // Register handlers for proxy routes.
@@ -25,7 +25,7 @@ func RegisterHandlers(route string, handler http.HandlerFunc) {
 }
 
 // StartServer starts the HTTP server with the given address and handler.
-func StartServer(config *Config.Config, logger *slog.Logger) (*http.Server, error) {
+func StartServer(config *config.Config, logger *slog.Logger) (*http.Server, error) {
 	address := config.Relay.Address
 	logger.Info("Starting Uplink Relay  🛰  ", "address", address)
 	server := &http.Server{Addr: address, Handler: http.DefaultServeMux}
@@ -37,7 +37,7 @@ func StartServer(config *Config.Config, logger *slog.Logger) (*http.Server, erro
 			err = server.ListenAndServe()
 		}
 		if err != nil && err != http.ErrServerClosed {
-			logger.Error("ListenAndServe(): %v", err)
+			logger.Error("ListenAndServe error", "err", err)
 			os.Exit(1)
 		}
 	}()
@@ -49,7 +49,7 @@ func ShutdownServer(server *http.Server, logger *slog.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := server.Shutdown(ctx); err != nil {
-		logger.Error("Uplink Relay Shutdown: %v", err)
+		logger.Error("Uplink Relay Shutdown", "err", err)
 	} else {
 		logger.Info("Uplink Relay shut down properly")
 	}
@@ -110,7 +110,6 @@ func parseRequest(r *http.Request) (UplinkRelayRequest, error) {
 		err := fmt.Errorf("failed to read request body: %w", err)
 		return requestBody, err
 	}
-
 	err = json.Unmarshal(body, &requestBody)
 	if err != nil {
 		err := fmt.Errorf("failed to unmarshal request body: %w", err)
@@ -159,9 +158,9 @@ func debugResponseHeaders(logger *slog.Logger, headers http.Header) {
 func debugResponseBody(logger *slog.Logger, r *http.Response) {
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
-		logger.Error("Failed to read response body: %v\n", err)
+		logger.Error("Failed to read response body", "err", err)
 	}
-	logger.Info("Response Body", "body", bodyBytes)
+	logger.Debug("Response Body", "body", bodyBytes)
 
 	// Replace the body so it can be read again later
 	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
@@ -177,7 +176,7 @@ func ParseGraphRef(graphRef string) (string, string, error) {
 }
 
 // Modifies the proxied response before it is returned to the client.
-func modifyProxiedResponse(config *Config.Config, cache Cache.Cache, cacheKey string, uplinkRequest UplinkRelayRequest, logger *slog.Logger) func(*http.Response) error {
+func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey string, uplinkRequest UplinkRelayRequest, logger *slog.Logger) func(*http.Response) error {
 	return func(resp *http.Response) error {
 		// Debug log the response headers
 		debugResponseHeaders(logger, resp.Header)
@@ -195,14 +194,14 @@ func modifyProxiedResponse(config *Config.Config, cache Cache.Cache, cacheKey st
 		// Decode the response body into the response struct
 		responseBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			logger.Error("Failed to read response body: %v\n", err)
+			logger.Error("Failed to read response body", "err", err)
 			return nil
 		}
 
 		// Unmarshal the response body into the response struct
 		err = json.Unmarshal(responseBody, &responseStruct)
 		if err != nil {
-			logger.Error("Failed to unmarshal response body: %v\n", err)
+			logger.Error("Failed to unmarshal response body", "err", err)
 			return nil
 		}
 
@@ -211,7 +210,7 @@ func modifyProxiedResponse(config *Config.Config, cache Cache.Cache, cacheKey st
 			// Assert the type of the response
 			uplinkResponse, ok := responseStruct.(*UplinkSupergraphSdlResponse)
 			if !ok {
-				logger.Error("Failed to assert type of response: expected *UplinkSupergraphSdlResponse, got %T", uplinkResponse)
+				logger.Error(fmt.Sprintf("Failed to assert type of response: expected *UplinkSupergraphSdlResponse, got %T", uplinkResponse))
 				return nil
 			}
 
@@ -222,12 +221,15 @@ func modifyProxiedResponse(config *Config.Config, cache Cache.Cache, cacheKey st
 			logger.Debug("SupergraphSdlQuery response", "response", uplinkResponse)
 
 			// Cache the response for future requests.
-			cache.Set(cacheKey, schema, config.Cache.Duration)
+			if config.Cache.Enabled && schema != "" {
+				logger.Debug("Caching schema", "key", cacheKey)
+				cache.Set(cacheKey, schema, config.Cache.Duration)
+			}
 		} else if uplinkRequest.OperationName == "LicenseQuery" {
 			// Assert the type of the response
 			uplinkResponse, ok := responseStruct.(*UplinkLicenseResponse)
 			if !ok {
-				logger.Error("Failed to assert type of response: expected *UplinkLicenseResponse, got %T", uplinkResponse)
+				logger.Error(fmt.Sprintf("Failed to assert type of response: expected *UplinkLicenseResponse, got %T", uplinkResponse))
 				return nil
 			}
 
@@ -238,7 +240,7 @@ func modifyProxiedResponse(config *Config.Config, cache Cache.Cache, cacheKey st
 			logger.Debug("LicenseQuery response", "response", uplinkResponse)
 
 			// Cache the response for future requests, if caching is enabled
-			if config.Cache.Enabled {
+			if config.Cache.Enabled && jwt != "" {
 				logger.Debug("Caching JWT", "key", cacheKey)
 				cache.Set(cacheKey, jwt, config.Cache.Duration)
 			}
@@ -256,12 +258,18 @@ func modifyProxiedResponse(config *Config.Config, cache Cache.Cache, cacheKey st
 }
 
 // Creates a reverse proxy to the target URL.
-func makeProxy(config *Config.Config, cache Cache.Cache, httpClient *http.Client, logger *slog.Logger) func(*url.URL, string, UplinkRelayRequest) *httputil.ReverseProxy {
+func makeProxy(config *config.Config, cache cache.Cache, httpClient *http.Client, logger *slog.Logger) func(*url.URL, string, UplinkRelayRequest) *httputil.ReverseProxy {
 	return func(targetURL *url.URL, cacheKey string, uplinkRequest UplinkRelayRequest) *httputil.ReverseProxy {
-		proxy := httputil.NewSingleHostReverseProxy(targetURL)
+		proxy := &httputil.ReverseProxy{
+			Rewrite: func(pr *httputil.ProxyRequest) {
+				pr.Out.URL = targetURL
+				pr.Out.Host = targetURL.Host
+				pr.Out.Header = pr.In.Header
+			},
+		}
 		proxy.Transport = httpClient.Transport
 		proxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, err error) {
-			logger.Error("HTTP proxy error: %v\n", err)
+			logger.Error("HTTP proxy error", "err", err)
 		}
 		proxy.ModifyResponse = modifyProxiedResponse(config, cache, cacheKey, uplinkRequest, logger)
 		return proxy
@@ -278,7 +286,7 @@ func parseUrl(target string) (*url.URL, error) {
 }
 
 // Handles a cache hit by returning the cached response.
-func handleCacheHit(_ *Config.Config, _ Cache.Cache, _ *http.Client, cacheKey string, content []byte, logger *slog.Logger) func(w http.ResponseWriter, r *http.Request) error {
+func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger) func(w http.ResponseWriter, r *http.Request) error {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		var response interface{}
 
@@ -314,7 +322,7 @@ func handleCacheHit(_ *Config.Config, _ Cache.Cache, _ *http.Client, cacheKey st
 		// Convert the response to JSON
 		responseBody, err := json.Marshal(response)
 		if err != nil {
-			logger.Error("Failed to marshal response: %v\n", err)
+			logger.Error("Failed to marshal response", "err", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return nil
 		}
@@ -322,7 +330,7 @@ func handleCacheHit(_ *Config.Config, _ Cache.Cache, _ *http.Client, cacheKey st
 		// Write the cached content to the response
 		_, err = w.Write(responseBody)
 		if err != nil {
-			logger.Error("Failed to write response: %v\n", err)
+			logger.Error("Failed to write response", "err", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return nil
 		}
@@ -338,7 +346,7 @@ func handleCacheHit(_ *Config.Config, _ Cache.Cache, _ *http.Client, cacheKey st
 }
 
 // Handles a cache miss by proxying the request to the uplink service.
-func handleCacheMiss(config *Config.Config, cache Cache.Cache, httpClient *http.Client, rrSelector *Uplink.RoundRobinSelector, cacheKey string, uplinkRequest UplinkRelayRequest, logger *slog.Logger) func(w http.ResponseWriter, r *http.Request) error {
+func handleCacheMiss(config *config.Config, cache cache.Cache, httpClient *http.Client, rrSelector *uplink.RoundRobinSelector, cacheKey string, uplinkRequest UplinkRelayRequest, logger *slog.Logger) func(w http.ResponseWriter, r *http.Request) error {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		// Configure the reverse proxy for the chosen uplink.
 		rrUrl := rrSelector.Next()
@@ -359,7 +367,7 @@ func handleCacheMiss(config *Config.Config, cache Cache.Cache, httpClient *http.
 }
 
 // Handles requests to the relay endpoint.
-func RelayHandler(config *Config.Config, cache Cache.Cache, rrSelector *Uplink.RoundRobinSelector, httpClient *http.Client, logger *slog.Logger) http.HandlerFunc {
+func RelayHandler(config *config.Config, currentCache cache.Cache, rrSelector *uplink.RoundRobinSelector, httpClient *http.Client, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Debug log the request
 		logger.Debug("Received request", "method", r.Method, "path", r.URL.Path, "header", r.Header)
@@ -373,7 +381,7 @@ func RelayHandler(config *Config.Config, cache Cache.Cache, rrSelector *Uplink.R
 		// Parse the uplink request body
 		uplinkRequest, uplinkRequestErr := parseRequest(r)
 		if uplinkRequestErr != nil {
-			logger.Error("Failed to parse request body: %v\n", uplinkRequestErr)
+			logger.Error("Failed to parse request body", "err", uplinkRequestErr)
 			http.Error(w, "Bad Request", http.StatusBadRequest)
 			return
 		}
@@ -390,16 +398,15 @@ func RelayHandler(config *Config.Config, cache Cache.Cache, rrSelector *Uplink.R
 		operationName := uplinkRequest.OperationName
 
 		// Make the cache key using the graphID, variantID, and operationName
-		cacheKey := Cache.MakeCacheKey(graphID, variantID, operationName)
+		cacheKey := cache.MakeCacheKey(graphID, variantID, operationName)
 
 		// If cache is enabled, attempt to retrieve the response from the cache
 		if config.Cache.Enabled {
-
 			// Check if the response is cached and return it if found
-			if cacheContent, keyFound := cache.Get(cacheKey); keyFound {
+			if cacheContent, keyFound := currentCache.Get(cacheKey); keyFound {
 				// Handle the cache hit
-				logger.Info("Cache hit", "key", cacheKey)
-				handleCacheHit(config, cache, httpClient, cacheKey, cacheContent, logger)(w, r)
+				logger.Info("cache hit", "key", cacheKey)
+				handleCacheHit(cacheKey, cacheContent, logger)(w, r)
 				return
 			}
 
@@ -411,7 +418,7 @@ func RelayHandler(config *Config.Config, cache Cache.Cache, rrSelector *Uplink.R
 
 		success := false
 		for attempt := 0; attempt <= config.Uplink.RetryCount && !success; attempt++ {
-			err := handleCacheMiss(config, cache, httpClient, rrSelector, cacheKey, uplinkRequest, logger)(w, r)
+			err := handleCacheMiss(config, currentCache, httpClient, rrSelector, cacheKey, uplinkRequest, logger)(w, r)
 			if err != nil {
 				logger.Error("Request to uplink failed", "attempt", attempt, "err", err)
 				if attempt == config.Uplink.RetryCount {
@@ -426,6 +433,5 @@ func RelayHandler(config *Config.Config, cache Cache.Cache, rrSelector *Uplink.R
 				break
 			}
 		}
-
 	}
 }

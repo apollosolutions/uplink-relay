@@ -142,7 +142,7 @@ func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableD
 	}
 
 	// Log the final configuration
-	logger.Debug("Uplink Relay configuration: %+v", loadedConfig)
+	logger.Debug("Uplink Relay configuration: %+v", "config", loadedConfig)
 
 	return loadedConfig
 }

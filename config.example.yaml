@@ -15,7 +15,7 @@ cache:
   maxSize: 1024
 # redis: 
 #   enabled: true
-#   address: "redis://..."
+#   address: "localhost:6379"
 #   password: admin
 #   database: 0
 supergraphs:

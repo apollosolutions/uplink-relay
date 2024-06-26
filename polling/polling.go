@@ -1,6 +1,10 @@
 package polling
 
 import (
+	"apollosolutions/uplink-relay/cache"
+	"apollosolutions/uplink-relay/config"
+	"apollosolutions/uplink-relay/proxy"
+	"apollosolutions/uplink-relay/uplink"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -9,29 +13,24 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	Cache "apollosolutions/uplink-relay/cache"
-	Config "apollosolutions/uplink-relay/config"
-	Proxy "apollosolutions/uplink-relay/proxy"
-	Uplink "apollosolutions/uplink-relay/uplink"
 )
 
 // startPolling starts polling for updates at the specified interval.
-func StartPolling(config *Config.Config, cache Cache.Cache, httpClient *http.Client, logger *slog.Logger) {
+func StartPolling(userConfig *config.Config, systemCache cache.Cache, httpClient *http.Client, logger *slog.Logger) {
 	// Log when polling starts
 	logger.Debug("Polling started")
 
 	// Create a new ticker with the polling interval
-	ticker := time.NewTicker(time.Duration(config.Polling.Interval) * time.Second)
+	ticker := time.NewTicker(time.Duration(userConfig.Polling.Interval) * time.Second)
 	// Stop the ticker when the function returns
 	defer ticker.Stop()
 
 	// Poll for updates at the specified interval
 	for range ticker.C {
-		for _, supergraphConfig := range config.Supergraphs {
+		for _, supergraphConfig := range userConfig.Supergraphs {
 			// Poll for the graph
 			success := false
-			for i := 0; i < config.Polling.RetryCount && !success; i++ {
+			for i := 0; i < userConfig.Polling.RetryCount && !success; i++ {
 				logger.Debug("Polling for graph", "graphRef", supergraphConfig.GraphRef)
 
 				// Split the graph into GraphID and VariantID
@@ -40,14 +39,14 @@ func StartPolling(config *Config.Config, cache Cache.Cache, httpClient *http.Cli
 					logger.Error("Invalid GraphRef", "graphRef", supergraphConfig.GraphRef)
 					break
 				}
-				graphID, variantID, err := Proxy.ParseGraphRef(supergraphConfig.GraphRef)
+				graphID, variantID, err := proxy.ParseGraphRef(supergraphConfig.GraphRef)
 				if err != nil {
 					logger.Error("Failed to parse GraphRef", "graphRef", supergraphConfig.GraphRef)
 					break
 				}
 
 				// Fetch the schema for the graph
-				response, err := fetchSupergraphSdl(config, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey, logger)
+				response, err := fetchSupergraphSdl(userConfig, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey, logger)
 				if err != nil {
 					logger.Error("Failed to fetch schema for graph", "graphRef", supergraphConfig.GraphRef, "err", err)
 					break
@@ -56,13 +55,13 @@ func StartPolling(config *Config.Config, cache Cache.Cache, httpClient *http.Cli
 				schema := response.Data.RouterConfig.SupergraphSdl
 
 				// Update the cache
-				cacheKey := Cache.MakeCacheKey(graphID, variantID, "SupergraphSdlQuery")
+				cacheKey := cache.MakeCacheKey(graphID, variantID, "SupergraphSdlQuery")
 				// Set the cache using the fetched schema
 				logger.Debug("Updating SDL for GraphRef", "graphRef", supergraphConfig.GraphRef)
-				cache.Set(cacheKey, schema, config.Cache.Duration)
+				systemCache.Set(cacheKey, schema, userConfig.Cache.Duration)
 
 				// Fetch the router license
-				licenseResponse, err := fetchRouterLicense(config, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey, logger)
+				licenseResponse, err := fetchRouterLicense(userConfig, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey, logger)
 				if err != nil {
 					logger.Error("Failed to fetch router license for graph %s: %v", supergraphConfig.GraphRef, err)
 					break
@@ -71,26 +70,26 @@ func StartPolling(config *Config.Config, cache Cache.Cache, httpClient *http.Cli
 				jwt := licenseResponse.Data.RouterEntitlements.Entitlement.Jwt
 
 				// Update the cache
-				cacheKey = Cache.MakeCacheKey(graphID, variantID, "LicenseQuery")
+				cacheKey = cache.MakeCacheKey(graphID, variantID, "LicenseQuery")
 				// Set the cache using the fetched license
 				logger.Debug("Updating license for GraphRef", "graphRef", supergraphConfig.GraphRef)
-				cache.Set(cacheKey, jwt, config.Cache.Duration)
+				systemCache.Set(cacheKey, jwt, userConfig.Cache.Duration)
 
 				// If successful, log the success
 				logger.Info("Successfully polled for graph", "graphRef", supergraphConfig.GraphRef)
 				success = true
 			}
 			if !success {
-				logger.Error("Failed to poll uplink for graph", "graphRef", supergraphConfig.GraphRef, "retries", config.Polling.RetryCount)
+				logger.Error("Failed to poll uplink for graph", "graphRef", supergraphConfig.GraphRef, "retries", userConfig.Polling.RetryCount)
 			}
 		}
 	}
 }
 
 // fetchSupergraphSdl fetches the supergraph SDL for the specified graph.
-func fetchSupergraphSdl(config *Config.Config, httpClient *http.Client, graphRef string, apiKey string, logger *slog.Logger) (*Proxy.UplinkSupergraphSdlResponse, error) {
+func fetchSupergraphSdl(systemConfig *config.Config, httpClient *http.Client, graphRef string, apiKey string, logger *slog.Logger) (*proxy.UplinkSupergraphSdlResponse, error) {
 	// Prepare the request body
-	requestBody, err := json.Marshal(Proxy.UplinkRelayRequest{
+	requestBody, err := json.Marshal(proxy.UplinkRelayRequest{
 		Variables: map[string]interface{}{
 			"apiKey":    apiKey,
 			"graph_ref": graphRef,
@@ -122,13 +121,13 @@ func fetchSupergraphSdl(config *Config.Config, httpClient *http.Client, graphRef
 	}
 
 	// Select the next uplink URL
-	selector := Uplink.NewRoundRobinSelector(config.Uplink.URLs)
+	selector := uplink.NewRoundRobinSelector(systemConfig.Uplink.URLs)
 	uplinkURL := selector.Next()
 
 	// Create a new request using http
 	req, err := http.NewRequest("POST", uplinkURL, bytes.NewBuffer(requestBody))
 	if err != nil {
-		logger.Error("Error creating request: %v", err)
+		logger.Error("Error creating request", "err", err)
 		return nil, err
 	}
 
@@ -147,7 +146,7 @@ func fetchSupergraphSdl(config *Config.Config, httpClient *http.Client, graphRef
 	// Send req using http Client
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		logger.Error("Error on response.\n[ERROR] - %v", err)
+		logger.Error("Error on response", "err", err)
 		return nil, err
 	}
 
@@ -164,7 +163,7 @@ func fetchSupergraphSdl(config *Config.Config, httpClient *http.Client, graphRef
 	logger.Debug("Raw response body", "body", bodyBytes)
 
 	// Decode the response body
-	var response Proxy.UplinkSupergraphSdlResponse
+	var response proxy.UplinkSupergraphSdlResponse
 	decodeErr := json.Unmarshal(bodyBytes, &response)
 	if decodeErr != nil {
 		return nil, fmt.Errorf("failed to decode response body: %w", decodeErr)
@@ -182,9 +181,9 @@ func fetchSupergraphSdl(config *Config.Config, httpClient *http.Client, graphRef
 }
 
 // fetchRouterLicense fetches the router license for the specified graph.
-func fetchRouterLicense(config *Config.Config, httpClient *http.Client, graphRef string, apiKey string, logger *slog.Logger) (*Proxy.UplinkLicenseResponse, error) {
+func fetchRouterLicense(userConfig *config.Config, httpClient *http.Client, graphRef string, apiKey string, logger *slog.Logger) (*proxy.UplinkLicenseResponse, error) {
 	// Define the request body
-	requestBody, err := json.Marshal(Proxy.UplinkRelayRequest{
+	requestBody, err := json.Marshal(proxy.UplinkRelayRequest{
 		Variables: map[string]interface{}{
 			"apiKey":    apiKey,
 			"graph_ref": graphRef,
@@ -216,13 +215,13 @@ func fetchRouterLicense(config *Config.Config, httpClient *http.Client, graphRef
 	}
 
 	// Select the next uplink URL
-	selector := Uplink.NewRoundRobinSelector(config.Uplink.URLs)
+	selector := uplink.NewRoundRobinSelector(userConfig.Uplink.URLs)
 	uplinkURL := selector.Next()
 
 	// Create a new request using http
 	req, err := http.NewRequest("POST", uplinkURL, bytes.NewBuffer(requestBody))
 	if err != nil {
-		logger.Error("Error creating request: %v", err)
+		logger.Error("Error creating request", "err", err)
 		return nil, err
 	}
 
@@ -235,7 +234,7 @@ func fetchRouterLicense(config *Config.Config, httpClient *http.Client, graphRef
 	// Send the request using the http Client
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		logger.Error("Error on response.\n[ERROR] - %v", err)
+		logger.Error("Error on response", "err", err)
 		return nil, err
 	}
 
@@ -243,7 +242,7 @@ func fetchRouterLicense(config *Config.Config, httpClient *http.Client, graphRef
 	bodyBytes, _ := io.ReadAll(resp.Body)
 
 	// Unmarshal the response body into the LicenseQueryResponse struct
-	var response Proxy.UplinkLicenseResponse
+	var response proxy.UplinkLicenseResponse
 	err = json.Unmarshal(bodyBytes, &response)
 	if err != nil {
 		return nil, err

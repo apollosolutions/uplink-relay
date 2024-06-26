@@ -12,14 +12,14 @@ import (
 
 	"github.com/go-redis/redis"
 
-	Cache "apollosolutions/uplink-relay/cache"
-	Config "apollosolutions/uplink-relay/config"
-	Logger "apollosolutions/uplink-relay/logger"
-	Polling "apollosolutions/uplink-relay/polling"
-	Proxy "apollosolutions/uplink-relay/proxy"
-	Redis "apollosolutions/uplink-relay/redis"
-	Uplink "apollosolutions/uplink-relay/uplink"
-	Webhooks "apollosolutions/uplink-relay/webhooks"
+	"apollosolutions/uplink-relay/cache"
+	"apollosolutions/uplink-relay/config"
+	"apollosolutions/uplink-relay/logger"
+	"apollosolutions/uplink-relay/polling"
+	"apollosolutions/uplink-relay/proxy"
+	apolloredis "apollosolutions/uplink-relay/redis"
+	"apollosolutions/uplink-relay/uplink"
+	"apollosolutions/uplink-relay/webhooks"
 )
 
 var (
@@ -35,64 +35,65 @@ func init() {
 
 // main contains the main application logic.
 func main() {
-
 	// Initialize the logger.
-	logger := Logger.MakeLogger(enableDebug)
+	logger := logger.MakeLogger(enableDebug)
 
 	// Load the default configuration.
-	defaultConfig := Config.NewDefaultConfig()
+	defaultConfig := config.NewDefaultConfig()
 
 	// Load the application configuration.
-	userConfig, err := Config.LoadConfig(*configPath)
+	userConfig, err := config.LoadConfig(*configPath)
 	if err != nil {
-		logger.Error("Could not load configuration: %v", err)
+		logger.Error("Could not load configuration", "err", err)
 		os.Exit(1)
 	}
 
 	// Merge the default and user configurations.
-	config := Config.MergeWithDefaultConfig(defaultConfig, userConfig, enableDebug, logger)
+	mergedConfig := config.MergeWithDefaultConfig(defaultConfig, userConfig, enableDebug, logger)
 
 	// Validate the loaded configuration.
-	if err := config.Validate(); err != nil {
-		logger.Error("Invalid configuration: %v", err)
+	if err := mergedConfig.Validate(); err != nil {
+		logger.Error("Invalid configuration", "err", err)
 		os.Exit(1)
 	}
 
 	// Initialize caching based on the configuration.
-	var cache Cache.Cache
-	if config.Redis.Enabled {
+	var uplinkCache cache.Cache
+	if mergedConfig.Redis.Enabled {
+		logger.Info("Using Redis cache", "address", mergedConfig.Redis.Address)
 		redisClient := redis.NewClient(&redis.Options{
-			Addr:     config.Redis.Address,
-			Password: config.Redis.Password,
-			DB:       config.Redis.Database,
+			Addr:     mergedConfig.Redis.Address,
+			Password: mergedConfig.Redis.Password,
+			DB:       mergedConfig.Redis.Database,
 		})
-		cache = Redis.NewRedisCache(redisClient)
+		redisClient.Ping()
+		uplinkCache = apolloredis.NewRedisCache(redisClient)
 	} else {
-		cache = Cache.NewMemoryCache(config.Cache.MaxSize)
+		uplinkCache = cache.NewMemoryCache(mergedConfig.Cache.MaxSize)
 	}
 	// Initialize the round-robin URL selector.
-	rrSelector := Uplink.NewRoundRobinSelector(config.Uplink.URLs)
+	rrSelector := uplink.NewRoundRobinSelector(mergedConfig.Uplink.URLs)
 
 	// Configure the HTTP client with a timeout.
 	httpClient := &http.Client{
-		Timeout: time.Duration(config.Uplink.Timeout) * time.Second,
+		Timeout: time.Duration(mergedConfig.Uplink.Timeout) * time.Second,
 	}
 
 	// Set up the main request handler
-	Proxy.RegisterHandlers("/*", Proxy.RelayHandler(config, cache, rrSelector, httpClient, logger))
+	proxy.RegisterHandlers("/*", proxy.RelayHandler(mergedConfig, uplinkCache, rrSelector, httpClient, logger))
 
 	// Set up the webhook handler if enabled
-	if config.Webhook.Enabled {
-		Proxy.RegisterHandlers(config.Webhook.Path, Webhooks.WebhookHandler(config, cache, httpClient, logger))
+	if mergedConfig.Webhook.Enabled {
+		proxy.RegisterHandlers(mergedConfig.Webhook.Path, webhooks.WebhookHandler(mergedConfig, uplinkCache, httpClient, logger))
 	}
 
 	// Start the polling loop if enabled
-	if config.Polling.Enabled {
-		go Polling.StartPolling(config, cache, httpClient, logger)
+	if mergedConfig.Polling.Enabled {
+		go polling.StartPolling(mergedConfig, uplinkCache, httpClient, logger)
 	}
 
 	// Start the server and log its address.
-	server, err := Proxy.StartServer(config, logger)
+	server, err := proxy.StartServer(mergedConfig, logger)
 	if err != nil {
 		logger.Error(err.Error())
 		os.Exit(1)
@@ -106,5 +107,5 @@ func main() {
 	<-stop
 
 	// Shut down the server
-	Proxy.ShutdownServer(server, logger)
+	proxy.ShutdownServer(server, logger)
 }

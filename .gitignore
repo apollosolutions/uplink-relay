@@ -31,3 +31,7 @@ go.work.sum
 # Apollo Binary files
 relay
 router
+
+# Config files
+config.yml
+config.yaml
