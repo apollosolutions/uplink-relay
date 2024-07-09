@@ -15,6 +15,7 @@ import (
 	"apollosolutions/uplink-relay/cache"
 	"apollosolutions/uplink-relay/config"
 	"apollosolutions/uplink-relay/logger"
+	persistedqueries "apollosolutions/uplink-relay/persisted_queries"
 	"apollosolutions/uplink-relay/polling"
 	"apollosolutions/uplink-relay/proxy"
 	apolloredis "apollosolutions/uplink-relay/redis"
@@ -81,7 +82,7 @@ func main() {
 
 	// Set up the main request handler
 	proxy.RegisterHandlers("/*", proxy.RelayHandler(mergedConfig, uplinkCache, rrSelector, httpClient, logger))
-
+	proxy.RegisterHandlers("/persisted-queries/*", persistedqueries.PersistedQueryHandler(logger, httpClient, uplinkCache))
 	// Set up the webhook handler if enabled
 	if mergedConfig.Webhook.Enabled {
 		proxy.RegisterHandlers(mergedConfig.Webhook.Path, webhooks.WebhookHandler(mergedConfig, uplinkCache, httpClient, logger))

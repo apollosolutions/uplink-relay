@@ -16,6 +16,7 @@ import (
 
 	"apollosolutions/uplink-relay/cache"
 	"apollosolutions/uplink-relay/config"
+	persistedqueries "apollosolutions/uplink-relay/persisted_queries"
 	"apollosolutions/uplink-relay/uplink"
 )
 
@@ -59,7 +60,7 @@ func ShutdownServer(server *http.Server, logger *slog.Logger) {
 type UplinkRouterConfig struct {
 	Typename        string  `json:"__typename"`
 	ID              string  `json:"id"`
-	SupergraphSdl   string  `json:"supergraphSdl"`
+	SupergraphSdl   string  `json:"supergraphSdl,omitempty"`
 	MinDelaySeconds float64 `json:"minDelaySeconds"`
 }
 
@@ -86,7 +87,7 @@ type UplinkRouterEntitlements struct {
 	ID              string  `json:"id"`
 	Typename        string  `json:"__typename"`
 	MinDelaySeconds float64 `json:"minDelaySeconds"`
-	Entitlement     Jwt     `json:"entitlement"`
+	Entitlement     Jwt     `json:"entitlement,omitempty"`
 }
 
 // UplinkLicenseResponse struct
@@ -98,8 +99,9 @@ type UplinkLicenseResponse struct {
 
 // uplinkRelayResponses maps operation names to response structs.
 var uplinkRelayResponses = map[string]interface{}{
-	"SupergraphSdlQuery": &UplinkSupergraphSdlResponse{},
-	"LicenseQuery":       &UplinkLicenseResponse{},
+	"SupergraphSdlQuery":            &UplinkSupergraphSdlResponse{},
+	"LicenseQuery":                  &UplinkLicenseResponse{},
+	"PersistedQueriesManifestQuery": &persistedqueries.UplinkPersistedQueryResponse{},
 }
 
 // parseRequest parses and validates the request.
@@ -134,11 +136,14 @@ func debugRequestHeaders(logger *slog.Logger, r *http.Request) {
 // Reads and logs the request body if debug mode is enabled.
 // It replaces the request body with a new buffer so it can be read again later.
 func debugRequestBody(logger *slog.Logger, r *http.Request) {
+	if r.Body == nil {
+		return
+	}
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		logger.Error("Failed to read request body", "err", err)
 	}
-	logger.Info("Request body", "body", bodyBytes)
+	logger.Debug("Request body", "body", bodyBytes)
 
 	// Replace the body so it can be read again later
 	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
@@ -221,7 +226,7 @@ func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey st
 			logger.Debug("SupergraphSdlQuery response", "response", uplinkResponse)
 
 			// Cache the response for future requests.
-			if config.Cache.Enabled && schema != "" {
+			if config.Cache.Enabled {
 				logger.Debug("Caching schema", "key", cacheKey)
 				cache.Set(cacheKey, schema, config.Cache.Duration)
 			}
@@ -240,11 +245,45 @@ func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey st
 			logger.Debug("LicenseQuery response", "response", uplinkResponse)
 
 			// Cache the response for future requests, if caching is enabled
-			if config.Cache.Enabled && jwt != "" {
+			if config.Cache.Enabled {
 				logger.Debug("Caching JWT", "key", cacheKey)
 				cache.Set(cacheKey, jwt, config.Cache.Duration)
 			}
 
+		} else if uplinkRequest.OperationName == "PersistedQueriesManifestQuery" {
+			// Assert the type of the response
+			uplinkResponse, ok := responseStruct.(*persistedqueries.UplinkPersistedQueryResponse)
+			if !ok {
+				logger.Error(fmt.Sprintf("Failed to assert type of response: expected *UplinkPersistedQueryResponse, got %T", uplinkResponse))
+				return nil
+			}
+
+			// Log the PersistedQueryResponse
+			logger.Debug("PersistedQuery response", "response", uplinkResponse)
+
+			// Cache the response for future requests, if caching is enabled
+			if config.Cache.Enabled {
+				logger.Debug("Caching PersistedQuery", "key", cacheKey)
+				chunks, err := persistedqueries.CachePersistedQueryChunkData(config, logger, cache, uplinkResponse.Data.PersistedQueries.Chunks)
+				if err != nil {
+					logger.Error("Failed to cache PersistedQuery chunks", "err", err)
+				}
+				uplinkResponse.Data.PersistedQueries.Chunks = chunks
+
+				// Marshal the response struct
+				c, err := json.Marshal(uplinkResponse)
+				if err != nil {
+					logger.Error("Failed to marshal response", "err", err)
+				}
+
+				// Cache the response
+				err = cache.Set(cacheKey, string(c[:]), config.Cache.Duration)
+				if err != nil {
+					logger.Error("Failed to cache response", "err", err)
+				}
+			}
+		} else {
+			logger.Warn("Unknown operation name", "operationName", uplinkRequest.OperationName)
 		}
 
 		// Replace the response body with the original data
@@ -252,6 +291,10 @@ func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey st
 
 		// Log the proxied response
 		debugResponseBody(logger, resp)
+
+		// Reset the response struct to avoid caching the response across requests
+		// The cache function will handle caching the response
+		responseStruct = nil
 
 		return nil
 	}
@@ -292,31 +335,48 @@ func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger) func(w
 
 		// Format the response body based on operation name
 		if strings.Contains(cacheKey, "SupergraphSdlQuery") {
+			typename := "RouterConfigResult"
+			if len(content) == 0 {
+				typename = "Unchanged"
+			}
 			response = &UplinkSupergraphSdlResponse{
 				Data: struct {
 					RouterConfig UplinkRouterConfig `json:"routerConfig"`
 				}{
 					RouterConfig: UplinkRouterConfig{
 						ID:              time.Now().UTC().String(),
-						Typename:        "RouterConfigResult",
+						Typename:        typename,
 						SupergraphSdl:   string(content),
 						MinDelaySeconds: 30,
 					},
 				},
 			}
 		} else if strings.Contains(cacheKey, "LicenseQuery") {
+			typename := "RouterEntitlementsResult"
+			if len(content) == 0 {
+				typename = "Unchanged"
+			}
 			response = &UplinkLicenseResponse{
 				Data: struct {
 					RouterEntitlements UplinkRouterEntitlements `json:"routerEntitlements"`
 				}{
 					RouterEntitlements: UplinkRouterEntitlements{
 						ID:              time.Now().UTC().String(),
-						Typename:        "RouterEntitlementsResult",
+						Typename:        typename,
 						MinDelaySeconds: 60,
 						Entitlement:     Jwt{Jwt: string(content)},
 					},
 				},
 			}
+		} else if strings.Contains(cacheKey, "PersistedQueriesManifestQuery") {
+			var cachedResponse persistedqueries.UplinkPersistedQueryResponse
+			err := json.Unmarshal(content, &cachedResponse)
+			if err != nil {
+				logger.Error("Failed to unmarshal PersistedQuery chunks", "err", err)
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				return nil
+			}
+			response = cachedResponse
 		}
 
 		// Convert the response to JSON
@@ -326,6 +386,8 @@ func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger) func(w
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return nil
 		}
+		// Set the appropriate headers
+		w.Header().Add("X-Cache-Hit", "true")
 
 		// Write the cached content to the response
 		_, err = w.Write(responseBody)
@@ -334,9 +396,6 @@ func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger) func(w
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return nil
 		}
-
-		// Set the appropriate headers
-		w.Header().Set("X-Cache-Hit", "true")
 
 		// Log the response
 		logger.Debug("Cached Response", "response", responseBody)
@@ -354,6 +413,7 @@ func handleCacheMiss(config *config.Config, cache cache.Cache, httpClient *http.
 		if uplinkUrlErr != nil {
 			logger.Error("Failed to parse URL", "url", uplinkUrl)
 			http.Error(w, "Uplink Service Unavailable", http.StatusServiceUnavailable)
+			return uplinkUrlErr
 		}
 
 		// Create a new reverse proxy to uplink
@@ -398,14 +458,13 @@ func RelayHandler(config *config.Config, currentCache cache.Cache, rrSelector *u
 		operationName := uplinkRequest.OperationName
 
 		// Make the cache key using the graphID, variantID, and operationName
-		cacheKey := cache.MakeCacheKey(graphID, variantID, operationName)
-
+		cacheKey := cache.MakeCacheKey(graphID, variantID, operationName, uplinkRequest.Variables)
 		// If cache is enabled, attempt to retrieve the response from the cache
 		if config.Cache.Enabled {
 			// Check if the response is cached and return it if found
 			if cacheContent, keyFound := currentCache.Get(cacheKey); keyFound {
 				// Handle the cache hit
-				logger.Info("cache hit", "key", cacheKey)
+				logger.Debug("Cache hit", "key", cacheKey, "operationName", operationName)
 				handleCacheHit(cacheKey, cacheContent, logger)(w, r)
 				return
 			}
@@ -426,12 +485,17 @@ func RelayHandler(config *config.Config, currentCache cache.Cache, rrSelector *u
 					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 					return
 				}
-				logger.Info("Retrying...")
+				logger.Warn("Retrying request", "operationName", operationName)
 			} else {
 				logger.Info("Successfully proxied request", "cacheKey", cacheKey)
 				success = true
 				break
 			}
+		}
+		if !success {
+			logger.Error("Failed to proxy request", "operationName", operationName)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
 		}
 	}
 }
