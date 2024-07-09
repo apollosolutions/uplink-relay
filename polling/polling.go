@@ -3,6 +3,7 @@ package polling
 import (
 	"apollosolutions/uplink-relay/cache"
 	"apollosolutions/uplink-relay/config"
+	persistedqueries "apollosolutions/uplink-relay/persisted_queries"
 	"apollosolutions/uplink-relay/proxy"
 	"apollosolutions/uplink-relay/uplink"
 	"bytes"
@@ -48,14 +49,15 @@ func StartPolling(userConfig *config.Config, systemCache cache.Cache, httpClient
 				// Fetch the schema for the graph
 				response, err := fetchSupergraphSdl(userConfig, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey, logger)
 				if err != nil {
-					logger.Error("Failed to fetch schema for graph", "graphRef", supergraphConfig.GraphRef, "err", err)
+					logger.Error("Failed to fetch schema", "graphRef", supergraphConfig.GraphRef, "err", err)
 					break
 				}
 				// Extract the schema from the response
 				schema := response.Data.RouterConfig.SupergraphSdl
 
 				// Update the cache
-				cacheKey := cache.MakeCacheKey(graphID, variantID, "SupergraphSdlQuery")
+				cacheKey := cache.MakeCacheKey(graphID, variantID, "SupergraphSdlQuery", map[string]interface{}{"apiKey": supergraphConfig.ApolloKey, "graph_ref": supergraphConfig.GraphRef, "ifAfterId": nil})
+
 				// Set the cache using the fetched schema
 				logger.Debug("Updating SDL for GraphRef", "graphRef", supergraphConfig.GraphRef)
 				systemCache.Set(cacheKey, schema, userConfig.Cache.Duration)
@@ -63,17 +65,37 @@ func StartPolling(userConfig *config.Config, systemCache cache.Cache, httpClient
 				// Fetch the router license
 				licenseResponse, err := fetchRouterLicense(userConfig, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey, logger)
 				if err != nil {
-					logger.Error("Failed to fetch router license for graph %s: %v", supergraphConfig.GraphRef, err)
+					logger.Error("Failed to fetch router license", "graphRef", supergraphConfig.GraphRef, "err", err)
 					break
 				}
 				// Extract the license from the response
 				jwt := licenseResponse.Data.RouterEntitlements.Entitlement.Jwt
 
 				// Update the cache
-				cacheKey = cache.MakeCacheKey(graphID, variantID, "LicenseQuery")
+				cacheKey = cache.MakeCacheKey(graphID, variantID, "LicenseQuery", map[string]interface{}{"apiKey": supergraphConfig.ApolloKey, "graph_ref": supergraphConfig.GraphRef, "ifAfterId": nil})
 				// Set the cache using the fetched license
-				logger.Debug("Updating license for GraphRef", "graphRef", supergraphConfig.GraphRef)
+				logger.Debug("Updating license for GraphRef", "graphRef", supergraphConfig.GraphRef, "err", err)
 				systemCache.Set(cacheKey, jwt, userConfig.Cache.Duration)
+
+				// Fetch the router license
+				persistedQueryManifest, err := fetchPQManifest(userConfig, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey, "", logger)
+				if err != nil {
+					logger.Error("Failed to fetch persisted query manifest", "graphRef", supergraphConfig.GraphRef, "err", err)
+					break
+				}
+
+				pqManifest, err := json.Marshal(persistedQueryManifest)
+				if err != nil {
+					logger.Error("Failed to marshal PQ manifest", "graphRef", supergraphConfig.GraphRef, "err", err)
+					break
+				}
+
+				// Update the cache
+				cacheKey = cache.MakeCacheKey(graphID, variantID, "PersistedQueriesManifestQuery", map[string]interface{}{"apiKey": supergraphConfig.ApolloKey, "graph_ref": supergraphConfig.GraphRef, "ifAfterId": nil})
+
+				// Set the cache using the fetched license
+				logger.Debug("Updating persisted query manifest for GraphRef", "graphRef", supergraphConfig.GraphRef)
+				systemCache.Set(cacheKey, string(pqManifest[:]), userConfig.Cache.Duration)
 
 				// If successful, log the success
 				logger.Info("Successfully polled for graph", "graphRef", supergraphConfig.GraphRef)
@@ -136,12 +158,6 @@ func fetchSupergraphSdl(systemConfig *config.Config, httpClient *http.Client, gr
 	req.Header.Set("apollo-client-version", "1.0")
 	req.Header.Set("User-Agent", "UplinkRelay/1.0")
 	req.Header.Set("Content-Type", "application/json")
-
-	// Log the request details
-	logger.Info("Request method", "method", req.Method)
-	logger.Info("Request URL", "url", req.URL)
-	logger.Info("Request headers", "header", req.Header)
-	logger.Info("Request body", "body", requestBody)
 
 	// Send req using http Client
 	resp, err := httpClient.Do(req)
@@ -243,6 +259,79 @@ func fetchRouterLicense(userConfig *config.Config, httpClient *http.Client, grap
 
 	// Unmarshal the response body into the LicenseQueryResponse struct
 	var response proxy.UplinkLicenseResponse
+	err = json.Unmarshal(bodyBytes, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+// fetchPQManifest fetches the persisted query (PQ) manifest for the specified graph.
+func fetchPQManifest(userConfig *config.Config, httpClient *http.Client, graphRef string, apiKey string, ifAfterId string, logger *slog.Logger) (*persistedqueries.UplinkPersistedQueryResponse, error) {
+	// Define the request body
+	requestBody, err := json.Marshal(proxy.UplinkRelayRequest{
+		Variables: map[string]interface{}{
+			"apiKey":    apiKey,
+			"graph_ref": graphRef,
+			"ifAfterId": ifAfterId,
+		},
+		Query: `query PersistedQueriesManifestQuery($apiKey: String!, $graph_ref: String!, $ifAfterId: ID) {
+			persistedQueries(ref: $graph_ref, apiKey: $apiKey, ifAfterId: $ifAfterId) {
+				__typename
+				... on PersistedQueriesResult {
+				id
+				minDelaySeconds
+				chunks {
+					id
+					urls
+				}
+				}
+				... on Unchanged {
+					id
+					minDelaySeconds
+				}
+				... on FetchError {
+					code
+					message
+				}
+			}
+		}`,
+		OperationName: "PersistedQueriesManifestQuery",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Select the next uplink URL
+	selector := uplink.NewRoundRobinSelector(userConfig.Uplink.URLs)
+	uplinkURL := selector.Next()
+
+	// Create a new request using http
+	req, err := http.NewRequest("POST", uplinkURL, bytes.NewBuffer(requestBody))
+	if err != nil {
+		logger.Error("Error creating request", "err", err)
+		return nil, err
+	}
+
+	// Set the request headers
+	req.Header.Set("apollo-client-name", "UplinkRelay")
+	req.Header.Set("apollo-client-version", "1.0")
+	req.Header.Set("User-Agent", "UplinkRelay/1.0")
+	req.Header.Set("Content-Type", "application/json")
+
+	// Send the request using the http Client
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		logger.Error("Error on response", "err", err)
+		return nil, err
+	}
+
+	// Read the response body
+	bodyBytes, _ := io.ReadAll(resp.Body)
+
+	// Unmarshal the response body into the LicenseQueryResponse struct
+	var response persistedqueries.UplinkPersistedQueryResponse
 	err = json.Unmarshal(bodyBytes, &response)
 	if err != nil {
 		return nil, err

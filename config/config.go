@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"reflect"
 
@@ -23,8 +24,9 @@ type Config struct {
 
 // RelayConfig defines the address the proxy server listens on.
 type RelayConfig struct {
-	Address string         `yaml:"address"` // Address to bind the relay server on.
-	TLS     RelayTlsConfig `yaml:"tls"`     // TLS configuration for the relay server.
+	Address   string         `yaml:"address"`   // Address to bind the relay server on.
+	TLS       RelayTlsConfig `yaml:"tls"`       // TLS configuration for the relay server.
+	PublicURL string         `yaml:"publicURL"` // Public URL for the relay server.
 }
 
 // RelayTlsConfig defines the TLS configuration for the relay server.
@@ -88,6 +90,7 @@ func NewDefaultConfig() *Config {
 			RetryCount: -1,
 		},
 		Cache: CacheConfig{
+			Enabled:  true,
 			Duration: -1,
 			MaxSize:  1000,
 		},
@@ -226,6 +229,12 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("relay address cannot be empty")
 	}
 
+	if c.Relay.PublicURL != "" {
+		_, err := url.Parse(c.Relay.PublicURL)
+		if err != nil {
+			return fmt.Errorf("invalid publicURL: %s", err)
+		}
+	}
 	// Validate Uplink configuration
 	if len(c.Uplink.URLs) == 0 {
 		return fmt.Errorf("uplink URLs cannot be empty")

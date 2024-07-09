@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"sync"
 	"time"
@@ -41,14 +42,14 @@ func (c *MemoryCache) Get(key string) ([]byte, bool) {
 	// If the item is not found or has expired, return a cache miss.
 	// The special case of time.Unix(1<<63-1, 0) is used to indicate that an item never expires- and
 	// time.Before will always return true for this case.
-	if !found || (item.Expiration.Before(time.Now()) && item.Expiration != time.Unix(1<<63-1, 0)) {
+	if !found || timeBeforeWithIndefinite(item.Expiration, time.Now()) {
 		return nil, false
 	}
 	return item.Content, true
 }
 
 // Set adds an item to the cache with a specified duration until expiration.
-// If duration is -1, the item never expires.
+// If duration is -1, the item never expires and will never be removed, even if it is above the cache capacity.
 func (c *MemoryCache) Set(key string, content string, duration int) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -58,7 +59,7 @@ func (c *MemoryCache) Set(key string, content string, duration int) error {
 		var oldestKey string
 		var oldestExpiration time.Time
 		for k, v := range c.items {
-			if oldestKey == "" || v.Expiration.Before(oldestExpiration) {
+			if oldestKey == "" || timeBeforeWithIndefinite(v.Expiration, oldestExpiration) {
 				oldestKey = k
 				oldestExpiration = v.Expiration
 			}
@@ -79,6 +80,16 @@ func (c *MemoryCache) Set(key string, content string, duration int) error {
 }
 
 // makeCacheKey generates a cache key from the provided graphID, variantID, and operationName.
-func MakeCacheKey(graphID, variantID, operationName string) string {
+func MakeCacheKey(graphID, variantID, operationName string, extraArgs ...interface{}) string {
+	// Append any extra arguments to the cache key.
+	if len(extraArgs) > 0 {
+		hash := sha256.Sum256([]byte(fmt.Sprint(extraArgs...)))
+		return fmt.Sprintf("%s:%s:%s:%x", graphID, variantID, operationName, hash)
+	}
+
 	return fmt.Sprintf("%s:%s:%s", graphID, variantID, operationName)
+}
+
+func timeBeforeWithIndefinite(expirationTime time.Time, compareTo time.Time) bool {
+	return expirationTime.Before(compareTo) && expirationTime != time.Unix(1<<63-1, 0)
 }

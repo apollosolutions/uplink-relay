@@ -9,7 +9,9 @@ import (
 func MakeLogger(enableDebug *bool) *slog.Logger {
 	lvl := new(slog.LevelVar)
 
-	if *enableDebug {
+	if enableDebug == nil {
+		lvl.Set(slog.LevelInfo)
+	} else if *enableDebug {
 		lvl.Set(slog.LevelDebug)
 	} else {
 		lvl.Set(slog.LevelInfo)
