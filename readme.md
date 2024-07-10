@@ -19,10 +19,9 @@ We may not respond to issues and pull requests at this time.
 ## Getting Started
 
 1. Clone the repository: `git clone https://github.com/apollosolutions/uplink-relay.git`
-2. Navigate to the project directory: `cd relay`
 3. Install dependencies: `go mod download`
-4. Build the project: `go build -o relay .`
-5. Run the project: `./relay`
+4. Build the project: `go build .`
+5. Run the project: `./uplink-relay`
 
 ## Configuration
 
@@ -78,6 +77,6 @@ docker run -p 8080:8080 ghcr.io/apollosolutions/uplink-relay:main
 
 Here's how to build and run the Docker image:
 ```
-docker build -t relay .
-docker run -p 8080:8080 relay
+docker build -t uplink-relay .
+docker run -p 8080:8080 uplink-relay
 ```
