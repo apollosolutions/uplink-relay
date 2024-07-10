@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -195,21 +196,40 @@ func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey st
 			logger.Warn("Unknown operation name", "operationName", uplinkRequest.OperationName)
 			return nil
 		}
+		var responseBody []byte
 
-		// Decode the response body into the response struct
-		responseBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			logger.Error("Failed to read response body", "err", err)
-			return nil
+		if resp.Header.Get("Content-Encoding") == "gzip" {
+			logger.Debug("Decompressing response body")
+			// Decompress the response body
+			reader, err := gzip.NewReader(resp.Body)
+			if err != nil {
+				logger.Error("Failed to decompress response body", "err", err)
+				return err
+			}
+			defer reader.Close()
+
+			responseBody, err = io.ReadAll(reader)
+			if err != nil {
+				logger.Error("Failed to read decompressed response body", "err", err)
+				return err
+			}
+		} else {
+			// Decode the response body into the response struct
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				logger.Error("Failed to read response body", "err", err)
+				return nil
+			}
+
+			responseBody = body
 		}
 
 		// Unmarshal the response body into the response struct
-		err = json.Unmarshal(responseBody, &responseStruct)
+		err := json.Unmarshal(responseBody, &responseStruct)
 		if err != nil {
-			logger.Error("Failed to unmarshal response body", "err", err)
+			logger.Error("Failed to unmarshal response body", "err", err, "responseBody", string(responseBody[:]), "operationName", uplinkRequest.OperationName, "cacheKey", cacheKey, "response headers", resp.Header)
 			return nil
 		}
-
 		// Cache the response based on the operation name
 		if uplinkRequest.OperationName == "SupergraphSdlQuery" {
 			// Assert the type of the response
@@ -267,6 +287,7 @@ func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey st
 				chunks, err := persistedqueries.CachePersistedQueryChunkData(config, logger, cache, uplinkResponse.Data.PersistedQueries.Chunks)
 				if err != nil {
 					logger.Error("Failed to cache PersistedQuery chunks", "err", err)
+					return err
 				}
 				uplinkResponse.Data.PersistedQueries.Chunks = chunks
 
@@ -442,6 +463,12 @@ func RelayHandler(config *config.Config, currentCache cache.Cache, rrSelector *u
 		uplinkRequest, uplinkRequestErr := parseRequest(r)
 		if uplinkRequestErr != nil {
 			logger.Error("Failed to parse request body", "err", uplinkRequestErr)
+			http.Error(w, "Bad Request", http.StatusBadRequest)
+			return
+		}
+
+		if uplinkRequest.Variables["graph_ref"] == nil {
+			logger.Error("Missing graph_ref in request body")
 			http.Error(w, "Bad Request", http.StatusBadRequest)
 			return
 		}

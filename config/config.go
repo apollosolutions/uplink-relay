@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"slices"
 
 	"gopkg.in/yaml.v3"
 )
@@ -230,10 +231,20 @@ func (c *Config) Validate() error {
 	}
 
 	if c.Relay.PublicURL != "" {
-		_, err := url.Parse(c.Relay.PublicURL)
+		allowedProtocols := []string{"http", "https"}
+		parsedUrl, err := url.Parse(c.Relay.PublicURL)
 		if err != nil {
 			return fmt.Errorf("invalid publicURL: %s", err)
 		}
+
+		if parsedUrl == nil || parsedUrl.Scheme == "" || parsedUrl.Host == "" {
+			return fmt.Errorf("invalid publicURL: %s", c.Relay.PublicURL)
+		}
+
+		if !slices.Contains(allowedProtocols, parsedUrl.Scheme) {
+			return fmt.Errorf(`invalid publicURL scheme "%s"; must be one of "http" or "https"`, parsedUrl.Scheme)
+		}
+
 	}
 	// Validate Uplink configuration
 	if len(c.Uplink.URLs) == 0 {
