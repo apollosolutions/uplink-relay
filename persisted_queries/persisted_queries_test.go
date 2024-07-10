@@ -121,7 +121,7 @@ func TestPersistedQueryHandler(t *testing.T) {
 	handler5 := http.HandlerFunc(PersistedQueryHandler(log, http.DefaultClient, mockCache))
 	handler5.ServeHTTP(rr5, req5)
 	if status := rr5.Code; status != http.StatusNotFound {
-		t.Errorf("Handler returned wrong status code: got %v, want %v", status, http.StatusOK)
+		t.Errorf("Handler returned wrong status code: got %v, want %v", status, http.StatusNotFound)
 	}
 	_, found := mockCache.Get("pq:123:0")
 	if found {
