@@ -227,7 +227,7 @@ func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey st
 		// Unmarshal the response body into the response struct
 		err := json.Unmarshal(responseBody, &responseStruct)
 		if err != nil {
-			logger.Error("Failed to unmarshal response body", "err", err, "responseBody", string(responseBody[:]), "operationName", uplinkRequest.OperationName, "cacheKey", cacheKey, "response headers", resp.Header)
+			logger.Error("Failed to unmarshal response body", "err", err, "responseBody", string(responseBody[:]))
 			return nil
 		}
 		// Cache the response based on the operation name
