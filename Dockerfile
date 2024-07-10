@@ -17,10 +17,10 @@ RUN go mod download
 COPY . .
 
 # Build the Go app
-RUN go build -o relay .
+RUN go build .
 
 # Expose port 8080 to the outside world
 EXPOSE 8080
 
 # Command to run the executable
-CMD ["./relay"]
+CMD ["./uplink-relay"]

@@ -30,8 +30,12 @@ go.work.sum
 
 # Apollo Binary files
 relay
+uplink-relay
 router
 
 # Config files
 config.yml
 config.yaml
+
+# IDE Files
+.idea
