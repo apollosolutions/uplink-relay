@@ -30,7 +30,7 @@ Uplink Relay can be configured using a YAML configuration file. Here's a complet
 ```yaml
 relay:
   address: "localhost:8080"
-  publicURL: "localhost:8080"
+  publicURL: "http://localhost:8080"
 uplink:
   timeout: 10
   urls:

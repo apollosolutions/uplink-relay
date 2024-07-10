@@ -60,6 +60,9 @@ func (c *MemoryCache) Set(key string, content string, duration int) error {
 		var oldestExpiration time.Time
 		for k, v := range c.items {
 			if oldestKey == "" || timeBeforeWithIndefinite(v.Expiration, oldestExpiration) {
+				if isIndefinite(v.Expiration) {
+					continue
+				}
 				oldestKey = k
 				oldestExpiration = v.Expiration
 			}
@@ -91,5 +94,9 @@ func MakeCacheKey(graphID, variantID, operationName string, extraArgs ...interfa
 }
 
 func timeBeforeWithIndefinite(expirationTime time.Time, compareTo time.Time) bool {
-	return expirationTime.Before(compareTo) && expirationTime != time.Unix(1<<63-1, 0)
+	return expirationTime.Before(compareTo) && !isIndefinite(expirationTime)
+}
+
+func isIndefinite(expirationTime time.Time) bool {
+	return expirationTime == time.Unix(1<<63-1, 0)
 }

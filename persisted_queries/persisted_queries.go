@@ -86,6 +86,10 @@ func CachePersistedQueryChunkData(config *config.Config, logger *slog.Logger, sy
 		logger.Debug("Caching disabled, skipping", "publicURL", config.Relay.PublicURL, "cacheEnabled", config.Cache.Enabled)
 		return chunks, nil
 	}
+	if !strings.HasPrefix(config.Relay.PublicURL, "http") {
+		logger.Error("Invalid public URL", "publicURL", config.Relay.PublicURL)
+		return nil, fmt.Errorf("invalid publicURL: %s", config.Relay.PublicURL)
+	}
 	parsedUrl, err := url.Parse(config.Relay.PublicURL)
 	if err != nil {
 		return nil, err

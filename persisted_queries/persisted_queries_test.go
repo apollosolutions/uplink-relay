@@ -133,7 +133,7 @@ func TestCachePersistedQueryChunkData(t *testing.T) {
 	log := logger.MakeLogger(nil)
 	mockCache := cache.NewMemoryCache(1000)
 	mockConfig := config.NewDefaultConfig()
-	mockConfig.Relay.PublicURL = "example.com"
+	mockConfig.Relay.PublicURL = "http://example.com"
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"format":"apollo-persisted-query-manifest","version":1,"operations":[{"id":"1234","body":"query{__typename}"}]}`))
 	}))
@@ -163,6 +163,17 @@ func TestCachePersistedQueryChunkData(t *testing.T) {
 		}
 	}
 
+	// Test case 2: Invalid URL causes an error
+	// Missing protocol
+	mockConfig.Relay.PublicURL = "example.com"
+	chunks = []UplinkPersistedQueryChunk{{
+		ID:   "789",
+		URLs: []string{mockServer.URL},
+	}}
+	_, err = CachePersistedQueryChunkData(mockConfig, log, mockCache, chunks)
+	if err == nil {
+		t.Errorf("Expected error, got nil")
+	}
 }
 
 func TestMakePersistedQueryCacheKey(t *testing.T) {
