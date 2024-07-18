@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -67,9 +68,13 @@ type WebhookConfig struct {
 
 // PollingConfig defines the configuration for polling from uplink.
 type PollingConfig struct {
-	Enabled    bool `yaml:"enabled"`    // Whether polling is enabled.
-	Interval   int  `yaml:"interval"`   // Interval for polling, in seconds.
-	RetryCount int  `yaml:"retryCount"` // Number of times to retry on polling failure.
+	Enabled          bool     `yaml:"enabled"`          // Whether polling is enabled.
+	Interval         int      `yaml:"interval"`         // Interval for polling, in seconds. Can only use either `interval` or `cronExpression`.
+	Expressions      []string `yaml:"cronExpressions"`  // Cron expression to use for polling. Can only use either `interval` or `cronExpression`.
+	RetryCount       int      `yaml:"retryCount"`       // Number of times to retry on polling failure.
+	Entitlements     *bool    `yaml:"entitlements"`     // Whether to poll for entitlements.
+	Supergraph       *bool    `yaml:"supergraph"`       // Whether to poll for supergraph.
+	PersistedQueries *bool    `yaml:"persistedQueries"` // Whether to poll for persisted queries.
 }
 
 // SupergraphConfig defines the list of graphs to use.
@@ -80,6 +85,8 @@ type SupergraphConfig struct {
 
 // NewDefaultConfig creates a new default configuration.
 func NewDefaultConfig() *Config {
+	pTrue := true
+	pFalse := false
 	return &Config{
 		Relay: RelayConfig{
 			Address: "localhost:8080",
@@ -101,8 +108,10 @@ func NewDefaultConfig() *Config {
 			Secret:  "",
 		},
 		Polling: PollingConfig{
-			Enabled:  false,
-			Interval: 60,
+			Enabled:          false,
+			PersistedQueries: &pFalse,
+			Entitlements:     &pTrue,
+			Supergraph:       &pTrue,
 		},
 	}
 }
@@ -125,7 +134,7 @@ func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableD
 		loadedConfig.Uplink.RetryCount = defaultConfig.Uplink.RetryCount
 	}
 
-	if loadedConfig.Cache.Duration == -1 {
+	if loadedConfig.Cache.Duration == 0 {
 		loadedConfig.Cache.Duration = defaultConfig.Cache.Duration
 	}
 
@@ -143,6 +152,18 @@ func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableD
 
 	if loadedConfig.Polling.Interval == 0 {
 		loadedConfig.Polling.Interval = defaultConfig.Polling.Interval
+	}
+
+	if loadedConfig.Polling.Entitlements == nil {
+		loadedConfig.Polling.Entitlements = defaultConfig.Polling.Entitlements
+	}
+
+	if loadedConfig.Polling.Supergraph == nil {
+		loadedConfig.Polling.Supergraph = defaultConfig.Polling.Supergraph
+	}
+
+	if loadedConfig.Polling.PersistedQueries == nil {
+		loadedConfig.Polling.PersistedQueries = defaultConfig.Polling.PersistedQueries
 	}
 
 	// Log the final configuration
@@ -258,7 +279,8 @@ func (c *Config) Validate() error {
 	}
 
 	// Validate Cache configuration
-	if c.Cache.Duration <= 0 {
+	if c.Cache.Duration <= 0 && c.Cache.Duration != -1 {
+		fmt.Printf("duration: %d\n", c.Cache.Duration)
 		return fmt.Errorf("cache duration must be positive")
 	}
 	if c.Cache.MaxSize <= 0 {
@@ -268,6 +290,26 @@ func (c *Config) Validate() error {
 	// Validate Webhook configuration
 	if c.Webhook.Enabled && c.Webhook.Path == "" {
 		return fmt.Errorf("webhook path cannot be empty when webhook is enabled")
+	}
+
+	// Validate Polling configuration
+	if c.Polling.Enabled {
+		if len(c.Polling.Expressions) > 0 {
+			if c.Polling.Interval > 0 {
+				fmt.Printf("interval: %d\n", c.Polling.Interval)
+				return fmt.Errorf("cannot use both interval and cronExpressions for polling")
+			}
+			for _, expression := range c.Polling.Expressions {
+				if _, err := cron.ParseStandard(expression); err != nil {
+					return fmt.Errorf("invalid cron expression: %s", err)
+				}
+			}
+		} else {
+			if c.Polling.Interval <= 0 {
+				return fmt.Errorf("polling interval must be positive")
+			}
+
+		}
 	}
 
 	return nil

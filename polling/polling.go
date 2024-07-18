@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/robfig/cron/v3"
 )
 
 // startPolling starts polling for updates at the specified interval.
@@ -21,32 +23,66 @@ func StartPolling(userConfig *config.Config, systemCache cache.Cache, httpClient
 	// Log when polling starts
 	logger.Debug("Polling started")
 
-	// Create a new ticker with the polling interval
-	ticker := time.NewTicker(time.Duration(userConfig.Polling.Interval) * time.Second)
-	// Stop the ticker when the function returns
-	defer ticker.Stop()
+	if !userConfig.Polling.Enabled {
+		logger.Debug("Polling is disabled")
+		return
+	}
 
-	// Poll for updates at the specified interval
-	for range ticker.C {
-		for _, supergraphConfig := range userConfig.Supergraphs {
-			// Poll for the graph
-			success := false
-			for i := 0; i < userConfig.Polling.RetryCount && !success; i++ {
-				logger.Debug("Polling for graph", "graphRef", supergraphConfig.GraphRef)
+	if userConfig.Polling.Interval > 0 {
+		// Create a new ticker with the polling interval
+		ticker := time.NewTicker(time.Duration(userConfig.Polling.Interval) * time.Second)
+		// Stop the ticker when the function returns
+		defer ticker.Stop()
 
-				// Split the graph into GraphID and VariantID
-				parts := strings.Split(supergraphConfig.GraphRef, "@")
-				if len(parts) != 2 {
-					logger.Error("Invalid GraphRef", "graphRef", supergraphConfig.GraphRef)
-					break
-				}
-				graphID, variantID, err := proxy.ParseGraphRef(supergraphConfig.GraphRef)
-				if err != nil {
-					logger.Error("Failed to parse GraphRef", "graphRef", supergraphConfig.GraphRef)
-					break
-				}
+		// Poll for updates at the specified interval
+		for range ticker.C {
+			logger.Debug("Polling for updates")
+			pollForUpdates(userConfig, systemCache, httpClient, logger)
+		}
+	}
 
-				// Fetch the schema for the graph
+	if len(userConfig.Polling.Expressions) > 0 {
+		crons := cron.New()
+		for _, expression := range userConfig.Polling.Expressions {
+			_, err := cron.ParseStandard(expression)
+			if err != nil {
+				logger.Error("Failed to parse cron expression", "expression", expression)
+				return
+			}
+
+			// Add a new cron job to poll for updates
+			crons.AddFunc(expression, func() {
+				pollForUpdates(userConfig, systemCache, httpClient, logger)
+			})
+		}
+		// Start the cron schedule
+		crons.Start()
+	}
+
+}
+
+func pollForUpdates(userConfig *config.Config, systemCache cache.Cache, httpClient *http.Client, logger *slog.Logger) {
+	for _, supergraphConfig := range userConfig.Supergraphs {
+		// Poll for the graph
+		success := false
+		for i := 0; i < userConfig.Polling.RetryCount && !success; i++ {
+			logger.Debug("Polling for graph", "graphRef", supergraphConfig.GraphRef)
+			logger.Debug("Options enabled", "supergraph", *userConfig.Polling.Supergraph, "entitlements", *userConfig.Polling.Entitlements, "persistedQueries", *userConfig.Polling.PersistedQueries)
+			// Split the graph into GraphID and VariantID
+			parts := strings.Split(supergraphConfig.GraphRef, "@")
+			if len(parts) != 2 {
+				logger.Error("Invalid GraphRef", "graphRef", supergraphConfig.GraphRef)
+				break
+			}
+			graphID, variantID, err := proxy.ParseGraphRef(supergraphConfig.GraphRef)
+			if err != nil {
+				logger.Error("Failed to parse GraphRef", "graphRef", supergraphConfig.GraphRef)
+				break
+			}
+
+			// Fetch the schema for the graph
+			if *userConfig.Polling.Supergraph {
+				logger.Debug("Polling for supergraph", "graphRef", supergraphConfig.GraphRef)
 				response, err := fetchSupergraphSdl(userConfig, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey, logger)
 				if err != nil {
 					logger.Error("Failed to fetch schema", "graphRef", supergraphConfig.GraphRef, "err", err)
@@ -61,8 +97,11 @@ func StartPolling(userConfig *config.Config, systemCache cache.Cache, httpClient
 				// Set the cache using the fetched schema
 				logger.Debug("Updating SDL for GraphRef", "graphRef", supergraphConfig.GraphRef)
 				systemCache.Set(cacheKey, schema, userConfig.Cache.Duration)
+			}
 
-				// Fetch the router license
+			// Fetch the router license
+			if *userConfig.Polling.Entitlements {
+				logger.Debug("Polling for router license", "graphRef", supergraphConfig.GraphRef)
 				licenseResponse, err := fetchRouterLicense(userConfig, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey, logger)
 				if err != nil {
 					logger.Error("Failed to fetch router license", "graphRef", supergraphConfig.GraphRef, "err", err)
@@ -78,12 +117,15 @@ func StartPolling(userConfig *config.Config, systemCache cache.Cache, httpClient
 					break
 				}
 				// Update the cache
-				cacheKey = cache.MakeCacheKey(graphID, variantID, "LicenseQuery", map[string]interface{}{"apiKey": supergraphConfig.ApolloKey, "graph_ref": supergraphConfig.GraphRef, "ifAfterId": nil})
+				cacheKey := cache.MakeCacheKey(graphID, variantID, "LicenseQuery", map[string]interface{}{"apiKey": supergraphConfig.ApolloKey, "graph_ref": supergraphConfig.GraphRef, "ifAfterId": nil})
 				// Set the cache using the fetched license
 				logger.Debug("Updating license for GraphRef", "graphRef", supergraphConfig.GraphRef, "err", err)
 				systemCache.Set(cacheKey, string(cacheEntryBytes[:]), userConfig.Cache.Duration)
+			}
 
-				// Fetch the router license
+			// Fetch the router license
+			if *userConfig.Polling.PersistedQueries {
+				logger.Debug("Polling for persisted query manifest", "graphRef", supergraphConfig.GraphRef)
 				persistedQueryManifest, err := fetchPQManifest(userConfig, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey, "", logger)
 				if err != nil {
 					logger.Error("Failed to fetch persisted query manifest", "graphRef", supergraphConfig.GraphRef, "err", err)
@@ -97,19 +139,18 @@ func StartPolling(userConfig *config.Config, systemCache cache.Cache, httpClient
 				}
 
 				// Update the cache
-				cacheKey = cache.MakeCacheKey(graphID, variantID, "PersistedQueriesManifestQuery", map[string]interface{}{"apiKey": supergraphConfig.ApolloKey, "graph_ref": supergraphConfig.GraphRef, "ifAfterId": nil})
+				cacheKey := cache.MakeCacheKey(graphID, variantID, "PersistedQueriesManifestQuery", map[string]interface{}{"apiKey": supergraphConfig.ApolloKey, "graph_ref": supergraphConfig.GraphRef, "ifAfterId": nil})
 
 				// Set the cache using the fetched license
 				logger.Debug("Updating persisted query manifest for GraphRef", "graphRef", supergraphConfig.GraphRef)
 				systemCache.Set(cacheKey, string(pqManifest[:]), userConfig.Cache.Duration)
-
-				// If successful, log the success
-				logger.Info("Successfully polled for graph", "graphRef", supergraphConfig.GraphRef)
-				success = true
 			}
-			if !success {
-				logger.Error("Failed to poll uplink for graph", "graphRef", supergraphConfig.GraphRef, "retries", userConfig.Polling.RetryCount)
-			}
+			// If successful, log the success
+			logger.Info("Successfully polled for graph", "graphRef", supergraphConfig.GraphRef)
+			success = true
+		}
+		if !success {
+			logger.Error("Failed to poll uplink for graph", "graphRef", supergraphConfig.GraphRef, "retries", userConfig.Polling.RetryCount)
 		}
 	}
 }
