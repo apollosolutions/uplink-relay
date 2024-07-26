@@ -350,10 +350,11 @@ func parseUrl(target string) (*url.URL, error) {
 }
 
 // Handles a cache hit by returning the cached response.
-func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger) func(w http.ResponseWriter, r *http.Request) error {
+func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger, cacheDuration time.Duration) func(w http.ResponseWriter, r *http.Request) error {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		var response interface{}
 
+		timestamp := time.Now().UTC().Round(cacheDuration).String()
 		// Format the response body based on operation name
 		if strings.Contains(cacheKey, "SupergraphSdlQuery") {
 			typename := "RouterConfigResult"
@@ -365,7 +366,7 @@ func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger) func(w
 					RouterConfig UplinkRouterConfig `json:"routerConfig"`
 				}{
 					RouterConfig: UplinkRouterConfig{
-						ID:              time.Now().UTC().String(),
+						ID:              timestamp,
 						Typename:        typename,
 						SupergraphSdl:   string(content),
 						MinDelaySeconds: 30,
@@ -382,7 +383,7 @@ func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger) func(w
 					RouterEntitlements UplinkRouterEntitlements `json:"routerEntitlements"`
 				}{
 					RouterEntitlements: UplinkRouterEntitlements{
-						ID:              time.Now().UTC().String(),
+						ID:              timestamp,
 						Typename:        typename,
 						MinDelaySeconds: 60,
 						Entitlement:     Jwt{Jwt: string(content)},
@@ -492,7 +493,7 @@ func RelayHandler(config *config.Config, currentCache cache.Cache, rrSelector *u
 			if cacheContent, keyFound := currentCache.Get(cacheKey); keyFound {
 				// Handle the cache hit
 				logger.Debug("Cache hit", "key", cacheKey, "operationName", operationName)
-				handleCacheHit(cacheKey, cacheContent, logger)(w, r)
+				handleCacheHit(cacheKey, cacheContent, logger, time.Duration(config.Cache.Duration)*time.Second)(w, r)
 				return
 			}
 
