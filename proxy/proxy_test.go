@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"apollosolutions/uplink-relay/cache"
 	"apollosolutions/uplink-relay/config"
@@ -137,7 +138,8 @@ func TestHandleCacheHit(t *testing.T) {
 	// Create a mock logger
 	pFalse := false
 	mockLogger := logger.MakeLogger(&pFalse)
-
+	mockConfig := config.NewDefaultConfig()
+	mockConfig.Cache.Duration = 10
 	// Create a new test request
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(licenseQuery))
 
@@ -145,7 +147,7 @@ func TestHandleCacheHit(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	// Call the handleCacheHit function
-	err := handleCacheHit(cache.MakeCacheKey("graph", "local", "LicenseQuery"), []byte(licenseResponse), mockLogger)(rr, req)
+	err := handleCacheHit(cache.MakeCacheKey("graph", "local", "LicenseQuery"), []byte(licenseResponse), mockLogger, time.Duration(mockConfig.Cache.Duration)*time.Second)(rr, req)
 	if err != nil {
 		t.Errorf("Expected no error, but got %v", err)
 	}
@@ -160,7 +162,7 @@ func TestHandleCacheHit(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/", nil)
 
 	// Call the handleCacheHit again for the SupergraphQuery
-	err = handleCacheHit(cache.MakeCacheKey("graph", "local", "SupergraphSdlQuery"), []byte("1234"), mockLogger)(rr, req)
+	err = handleCacheHit(cache.MakeCacheKey("graph", "local", "SupergraphSdlQuery"), []byte("1234"), mockLogger, time.Duration(mockConfig.Cache.Duration)*time.Second)(rr, req)
 	if err != nil {
 		t.Errorf("Expected no error, but got %v", err)
 	}
@@ -175,7 +177,7 @@ func TestHandleCacheHit(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/", nil)
 
 	// Call the handleCacheHit again for the PersistedQueriesManifestQuery
-	err = handleCacheHit(cache.MakeCacheKey("graph", "local", "PersistedQueriesManifestQuery"), []byte(persistedQueriesResponse), mockLogger)(rr, req)
+	err = handleCacheHit(cache.MakeCacheKey("graph", "local", "PersistedQueriesManifestQuery"), []byte(persistedQueriesResponse), mockLogger, time.Duration(mockConfig.Cache.Duration)*time.Second)(rr, req)
 	if err != nil {
 		t.Errorf("Expected no error, but got %v", err)
 	}

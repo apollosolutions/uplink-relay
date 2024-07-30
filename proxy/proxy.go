@@ -21,6 +21,11 @@ import (
 	"apollosolutions/uplink-relay/uplink"
 )
 
+type JWTCacheEntry struct {
+	Expiration string `json:"expiration"`
+	Jwt        string `json:"jwt"`
+}
+
 // Register handlers for proxy routes.
 func RegisterHandlers(route string, handler http.HandlerFunc) {
 	http.HandleFunc(route, handler)
@@ -88,7 +93,7 @@ type UplinkRouterEntitlements struct {
 	ID              string  `json:"id"`
 	Typename        string  `json:"__typename"`
 	MinDelaySeconds float64 `json:"minDelaySeconds"`
-	Entitlement     Jwt     `json:"entitlement,omitempty"`
+	Entitlement     *Jwt    `json:"entitlement,omitempty"`
 }
 
 // UplinkLicenseResponse struct
@@ -257,17 +262,27 @@ func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey st
 				logger.Error(fmt.Sprintf("Failed to assert type of response: expected *UplinkLicenseResponse, got %T", uplinkResponse))
 				return nil
 			}
-
-			// Extract the JWT from the LicenseQueryResponse
-			jwt := uplinkResponse.Data.RouterEntitlements.Entitlement.Jwt
-
 			// Log the LicenseQueryResponse
 			logger.Debug("LicenseQuery response", "response", uplinkResponse)
+
+			jwt := ""
+			if uplinkResponse.Data.RouterEntitlements.Entitlement != nil {
+				jwt = uplinkResponse.Data.RouterEntitlements.Entitlement.Jwt
+			}
 
 			// Cache the response for future requests, if caching is enabled
 			if config.Cache.Enabled {
 				logger.Debug("Caching JWT", "key", cacheKey)
-				cache.Set(cacheKey, jwt, config.Cache.Duration)
+				cacheEntry := JWTCacheEntry{
+					Jwt:        jwt,
+					Expiration: uplinkResponse.Data.RouterEntitlements.ID,
+				}
+				cacheEntryBytes, err := json.Marshal(cacheEntry)
+				if err != nil {
+					logger.Error("Failed to marshal license", "err", err)
+					return err
+				}
+				cache.Set(cacheKey, string(cacheEntryBytes[:]), config.Cache.Duration)
 			}
 
 		} else if uplinkRequest.OperationName == "PersistedQueriesManifestQuery" {
@@ -292,13 +307,16 @@ func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey st
 				uplinkResponse.Data.PersistedQueries.Chunks = chunks
 
 				// Marshal the response struct
-				c, err := json.Marshal(uplinkResponse)
+				responseBody, err = json.Marshal(uplinkResponse)
 				if err != nil {
-					logger.Error("Failed to marshal response", "err", err)
+					logger.Error("Failed to marshal cache entry", "err", err)
 				}
 
+				// Set the Content-Length header to the length of the response body as we've modified it to include the persisted query chunks hosted on the relay
+				resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(responseBody)))
+
 				// Cache the response
-				err = cache.Set(cacheKey, string(c[:]), config.Cache.Duration)
+				err = cache.Set(cacheKey, string(responseBody[:]), config.Cache.Duration)
 				if err != nil {
 					logger.Error("Failed to cache response", "err", err)
 				}
@@ -350,7 +368,7 @@ func parseUrl(target string) (*url.URL, error) {
 }
 
 // Handles a cache hit by returning the cached response.
-func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger) func(w http.ResponseWriter, r *http.Request) error {
+func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger, cacheDuration time.Duration) func(w http.ResponseWriter, r *http.Request) error {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		var response interface{}
 
@@ -360,12 +378,14 @@ func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger) func(w
 			if len(content) == 0 {
 				typename = "Unchanged"
 			}
+			timestamp := time.Now().UTC().Round(cacheDuration).String()
+
 			response = &UplinkSupergraphSdlResponse{
 				Data: struct {
 					RouterConfig UplinkRouterConfig `json:"routerConfig"`
 				}{
 					RouterConfig: UplinkRouterConfig{
-						ID:              time.Now().UTC().String(),
+						ID:              timestamp,
 						Typename:        typename,
 						SupergraphSdl:   string(content),
 						MinDelaySeconds: 30,
@@ -374,18 +394,29 @@ func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger) func(w
 			}
 		} else if strings.Contains(cacheKey, "LicenseQuery") {
 			typename := "RouterEntitlementsResult"
-			if len(content) == 0 {
-				typename = "Unchanged"
+			cacheResponse := JWTCacheEntry{}
+			err := json.Unmarshal(content, &cacheResponse)
+			if err != nil {
+				logger.Error("Failed to unmarshal JWT cache entry", "err", err)
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				return nil
 			}
+
+			jwtEntitlement := &Jwt{Jwt: string(cacheResponse.Jwt)}
+			if len(cacheResponse.Jwt) == 0 {
+				typename = "Unchanged"
+				jwtEntitlement = nil
+			}
+
 			response = &UplinkLicenseResponse{
 				Data: struct {
 					RouterEntitlements UplinkRouterEntitlements `json:"routerEntitlements"`
 				}{
 					RouterEntitlements: UplinkRouterEntitlements{
-						ID:              time.Now().UTC().String(),
+						ID:              cacheResponse.Expiration,
 						Typename:        typename,
-						MinDelaySeconds: 60,
-						Entitlement:     Jwt{Jwt: string(content)},
+						MinDelaySeconds: 10,
+						Entitlement:     jwtEntitlement,
 					},
 				},
 			}
@@ -492,7 +523,7 @@ func RelayHandler(config *config.Config, currentCache cache.Cache, rrSelector *u
 			if cacheContent, keyFound := currentCache.Get(cacheKey); keyFound {
 				// Handle the cache hit
 				logger.Debug("Cache hit", "key", cacheKey, "operationName", operationName)
-				handleCacheHit(cacheKey, cacheContent, logger)(w, r)
+				handleCacheHit(cacheKey, cacheContent, logger, time.Duration(config.Cache.Duration)*time.Second)(w, r)
 				return
 			}
 
