@@ -68,14 +68,20 @@ func StartPolling(userConfig *config.Config, systemCache cache.Cache, httpClient
 					logger.Error("Failed to fetch router license", "graphRef", supergraphConfig.GraphRef, "err", err)
 					break
 				}
-				// Extract the license from the response
-				jwt := licenseResponse.Data.RouterEntitlements.Entitlement.Jwt
-
+				cacheEntry := proxy.JWTCacheEntry{
+					Jwt:        licenseResponse.Data.RouterEntitlements.Entitlement.Jwt,
+					Expiration: licenseResponse.Data.RouterEntitlements.ID,
+				}
+				cacheEntryBytes, err := json.Marshal(cacheEntry)
+				if err != nil {
+					logger.Error("Failed to marshal license", "graphRef", supergraphConfig.GraphRef, "err", err)
+					break
+				}
 				// Update the cache
 				cacheKey = cache.MakeCacheKey(graphID, variantID, "LicenseQuery", map[string]interface{}{"apiKey": supergraphConfig.ApolloKey, "graph_ref": supergraphConfig.GraphRef, "ifAfterId": nil})
 				// Set the cache using the fetched license
 				logger.Debug("Updating license for GraphRef", "graphRef", supergraphConfig.GraphRef, "err", err)
-				systemCache.Set(cacheKey, jwt, userConfig.Cache.Duration)
+				systemCache.Set(cacheKey, string(cacheEntryBytes[:]), userConfig.Cache.Duration)
 
 				// Fetch the router license
 				persistedQueryManifest, err := fetchPQManifest(userConfig, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey, "", logger)
