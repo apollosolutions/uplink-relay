@@ -2,6 +2,13 @@ package uplink
 
 import "sync"
 
+// operation name mappings
+const (
+	SupergraphQuery       = "SupergraphSdlQuery"
+	LicenseQuery          = "LicenseQuery"
+	PersistedQueriesQuery = "PersistedQueriesManifestQuery"
+)
+
 // RoundRobinSelector manages rotating through uplink URLs in a round-robin fashion.
 type RoundRobinSelector struct {
 	urls      []string   // List of URLs to cycle through.

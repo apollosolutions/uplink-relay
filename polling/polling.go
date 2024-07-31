@@ -3,6 +3,7 @@ package polling
 import (
 	"apollosolutions/uplink-relay/cache"
 	"apollosolutions/uplink-relay/config"
+	"apollosolutions/uplink-relay/internal/util"
 	persistedqueries "apollosolutions/uplink-relay/persisted_queries"
 	"apollosolutions/uplink-relay/proxy"
 	"apollosolutions/uplink-relay/uplink"
@@ -19,14 +20,16 @@ import (
 )
 
 // startPolling starts polling for updates at the specified interval.
-func StartPolling(userConfig *config.Config, systemCache cache.Cache, httpClient *http.Client, logger *slog.Logger) {
+func StartPolling(userConfig *config.Config, systemCache cache.Cache, httpClient *http.Client, logger *slog.Logger, stopPolling chan bool) {
 	// Log when polling starts
-	logger.Debug("Polling started")
-
+	logger.Info("Polling started")
 	if !userConfig.Polling.Enabled {
 		logger.Debug("Polling is disabled")
 		return
 	}
+
+	// immediately poll for updates
+	pollForUpdates(userConfig, systemCache, httpClient, logger)
 
 	if userConfig.Polling.Interval > 0 {
 		// Create a new ticker with the polling interval
@@ -34,10 +37,15 @@ func StartPolling(userConfig *config.Config, systemCache cache.Cache, httpClient
 		// Stop the ticker when the function returns
 		defer ticker.Stop()
 
-		// Poll for updates at the specified interval
-		for range ticker.C {
-			logger.Debug("Polling for updates")
-			pollForUpdates(userConfig, systemCache, httpClient, logger)
+		for {
+			select {
+			case <-stopPolling:
+				logger.Debug("Polling stopped")
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				pollForUpdates(userConfig, systemCache, httpClient, logger)
+			}
 		}
 	}
 
@@ -57,11 +65,27 @@ func StartPolling(userConfig *config.Config, systemCache cache.Cache, httpClient
 		}
 		// Start the cron schedule
 		crons.Start()
+
+		for range stopPolling {
+			logger.Debug("Polling stopped")
+			crons.Stop()
+			return
+		}
 	}
 
 }
 
 func pollForUpdates(userConfig *config.Config, systemCache cache.Cache, httpClient *http.Client, logger *slog.Logger) {
+	if !userConfig.Polling.Enabled {
+		logger.Debug("Polling is disabled for graph")
+		return
+	}
+
+	if !*userConfig.Polling.Supergraph && !*userConfig.Polling.Entitlements && !*userConfig.Polling.PersistedQueries {
+		logger.Debug("Polling is disabled for all options")
+		logger.Info("Polling is disabled for all options", "supergraph", *userConfig.Polling.Supergraph, "entitlements", *userConfig.Polling.Entitlements, "persistedQueries", *userConfig.Polling.PersistedQueries)
+		return
+	}
 	for _, supergraphConfig := range userConfig.Supergraphs {
 		// Poll for the graph
 		success := false
@@ -74,14 +98,14 @@ func pollForUpdates(userConfig *config.Config, systemCache cache.Cache, httpClie
 				logger.Error("Invalid GraphRef", "graphRef", supergraphConfig.GraphRef)
 				break
 			}
-			graphID, variantID, err := proxy.ParseGraphRef(supergraphConfig.GraphRef)
+			graphID, variantID, err := util.ParseGraphRef(supergraphConfig.GraphRef)
 			if err != nil {
 				logger.Error("Failed to parse GraphRef", "graphRef", supergraphConfig.GraphRef)
 				break
 			}
 
-			// Fetch the schema for the graph
-			if *userConfig.Polling.Supergraph {
+			// Fetch the schema for the graph if enabled and the launch ID is not set as launchID implies a static schema
+			if *userConfig.Polling.Supergraph && supergraphConfig.LaunchID == "" {
 				logger.Debug("Polling for supergraph", "graphRef", supergraphConfig.GraphRef)
 				response, err := fetchSupergraphSdl(userConfig, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey, logger)
 				if err != nil {
@@ -92,15 +116,15 @@ func pollForUpdates(userConfig *config.Config, systemCache cache.Cache, httpClie
 				schema := response.Data.RouterConfig.SupergraphSdl
 
 				// Update the cache
-				cacheKey := cache.MakeCacheKey(graphID, variantID, "SupergraphSdlQuery", map[string]interface{}{"apiKey": supergraphConfig.ApolloKey, "graph_ref": supergraphConfig.GraphRef, "ifAfterId": nil})
+				cacheKey := cache.MakeCacheKey(graphID, variantID, "SupergraphSdlQuery", map[string]interface{}{"graph_ref": supergraphConfig.GraphRef, "ifAfterId": nil})
 
 				// Set the cache using the fetched schema
 				logger.Debug("Updating SDL for GraphRef", "graphRef", supergraphConfig.GraphRef)
 				systemCache.Set(cacheKey, schema, userConfig.Cache.Duration)
 			}
 
-			// Fetch the router license
-			if *userConfig.Polling.Entitlements {
+			// Fetch the router license if enabled and the offline license is not set
+			if *userConfig.Polling.Entitlements && supergraphConfig.OfflineLicense == "" {
 				logger.Debug("Polling for router license", "graphRef", supergraphConfig.GraphRef)
 				licenseResponse, err := fetchRouterLicense(userConfig, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey, logger)
 				if err != nil {
@@ -117,14 +141,14 @@ func pollForUpdates(userConfig *config.Config, systemCache cache.Cache, httpClie
 					break
 				}
 				// Update the cache
-				cacheKey := cache.MakeCacheKey(graphID, variantID, "LicenseQuery", map[string]interface{}{"apiKey": supergraphConfig.ApolloKey, "graph_ref": supergraphConfig.GraphRef, "ifAfterId": nil})
+				cacheKey := cache.MakeCacheKey(graphID, variantID, "LicenseQuery", map[string]interface{}{"graph_ref": supergraphConfig.GraphRef, "ifAfterId": nil})
 				// Set the cache using the fetched license
 				logger.Debug("Updating license for GraphRef", "graphRef", supergraphConfig.GraphRef, "err", err)
 				systemCache.Set(cacheKey, string(cacheEntryBytes[:]), userConfig.Cache.Duration)
 			}
 
-			// Fetch the router license
-			if *userConfig.Polling.PersistedQueries {
+			// Fetch the persisted queries manifest if enabled and the persisted query version is not set
+			if *userConfig.Polling.PersistedQueries && supergraphConfig.PersistedQueryVersion == "" {
 				logger.Debug("Polling for persisted query manifest", "graphRef", supergraphConfig.GraphRef)
 				persistedQueryManifest, err := fetchPQManifest(userConfig, httpClient, supergraphConfig.GraphRef, supergraphConfig.ApolloKey, "", logger)
 				if err != nil {
@@ -139,7 +163,7 @@ func pollForUpdates(userConfig *config.Config, systemCache cache.Cache, httpClie
 				}
 
 				// Update the cache
-				cacheKey := cache.MakeCacheKey(graphID, variantID, "PersistedQueriesManifestQuery", map[string]interface{}{"apiKey": supergraphConfig.ApolloKey, "graph_ref": supergraphConfig.GraphRef, "ifAfterId": nil})
+				cacheKey := cache.MakeCacheKey(graphID, variantID, "PersistedQueriesManifestQuery", map[string]interface{}{"graph_ref": supergraphConfig.GraphRef, "ifAfterId": nil})
 
 				// Set the cache using the fetched license
 				logger.Debug("Updating persisted query manifest for GraphRef", "graphRef", supergraphConfig.GraphRef)

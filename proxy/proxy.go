@@ -17,7 +17,9 @@ import (
 
 	"apollosolutions/uplink-relay/cache"
 	"apollosolutions/uplink-relay/config"
+	"apollosolutions/uplink-relay/internal/util"
 	persistedqueries "apollosolutions/uplink-relay/persisted_queries"
+	"apollosolutions/uplink-relay/pinning"
 	"apollosolutions/uplink-relay/uplink"
 )
 
@@ -29,6 +31,11 @@ type JWTCacheEntry struct {
 // Register handlers for proxy routes.
 func RegisterHandlers(route string, handler http.HandlerFunc) {
 	http.HandleFunc(route, handler)
+}
+
+// Deregister all handlers for proxy routes (for reload purposes)
+func DeregisterHandlers() {
+	http.DefaultServeMux = http.NewServeMux()
 }
 
 // StartServer starts the HTTP server with the given address and handler.
@@ -105,9 +112,9 @@ type UplinkLicenseResponse struct {
 
 // uplinkRelayResponses maps operation names to response structs.
 var uplinkRelayResponses = map[string]interface{}{
-	"SupergraphSdlQuery":            &UplinkSupergraphSdlResponse{},
-	"LicenseQuery":                  &UplinkLicenseResponse{},
-	"PersistedQueriesManifestQuery": &persistedqueries.UplinkPersistedQueryResponse{},
+	uplink.SupergraphQuery:       &UplinkSupergraphSdlResponse{},
+	uplink.LicenseQuery:          &UplinkLicenseResponse{},
+	uplink.PersistedQueriesQuery: &persistedqueries.UplinkPersistedQueryResponse{},
 }
 
 // parseRequest parses and validates the request.
@@ -177,15 +184,6 @@ func debugResponseBody(logger *slog.Logger, r *http.Response) {
 	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 }
 
-// Parses the graph_ref into graphID and variantID.
-func ParseGraphRef(graphRef string) (string, string, error) {
-	graphParts := strings.Split(graphRef, "@")
-	if len(graphParts) != 2 {
-		return "", "", fmt.Errorf("invalid graph_ref: %s", graphRef)
-	}
-	return graphParts[0], graphParts[1], nil
-}
-
 // Modifies the proxied response before it is returned to the client.
 func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey string, uplinkRequest UplinkRelayRequest, logger *slog.Logger) func(*http.Response) error {
 	return func(resp *http.Response) error {
@@ -236,7 +234,7 @@ func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey st
 			return nil
 		}
 		// Cache the response based on the operation name
-		if uplinkRequest.OperationName == "SupergraphSdlQuery" {
+		if uplinkRequest.OperationName == uplink.SupergraphQuery {
 			// Assert the type of the response
 			uplinkResponse, ok := responseStruct.(*UplinkSupergraphSdlResponse)
 			if !ok {
@@ -255,7 +253,7 @@ func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey st
 				logger.Debug("Caching schema", "key", cacheKey)
 				cache.Set(cacheKey, schema, config.Cache.Duration)
 			}
-		} else if uplinkRequest.OperationName == "LicenseQuery" {
+		} else if uplinkRequest.OperationName == uplink.LicenseQuery {
 			// Assert the type of the response
 			uplinkResponse, ok := responseStruct.(*UplinkLicenseResponse)
 			if !ok {
@@ -285,7 +283,7 @@ func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey st
 				cache.Set(cacheKey, string(cacheEntryBytes[:]), config.Cache.Duration)
 			}
 
-		} else if uplinkRequest.OperationName == "PersistedQueriesManifestQuery" {
+		} else if uplinkRequest.OperationName == uplink.PersistedQueriesQuery {
 			// Assert the type of the response
 			uplinkResponse, ok := responseStruct.(*persistedqueries.UplinkPersistedQueryResponse)
 			if !ok {
@@ -373,12 +371,12 @@ func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger, cacheD
 		var response interface{}
 
 		// Format the response body based on operation name
-		if strings.Contains(cacheKey, "SupergraphSdlQuery") {
+		if strings.Contains(cacheKey, uplink.SupergraphQuery) {
 			typename := "RouterConfigResult"
 			if len(content) == 0 {
 				typename = "Unchanged"
 			}
-			timestamp := time.Now().UTC().Round(cacheDuration).String()
+			timestamp := time.Now().UTC().Round(cacheDuration).Format(time.RFC3339)
 
 			response = &UplinkSupergraphSdlResponse{
 				Data: struct {
@@ -392,7 +390,7 @@ func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger, cacheD
 					},
 				},
 			}
-		} else if strings.Contains(cacheKey, "LicenseQuery") {
+		} else if strings.Contains(cacheKey, uplink.LicenseQuery) {
 			typename := "RouterEntitlementsResult"
 			cacheResponse := JWTCacheEntry{}
 			err := json.Unmarshal(content, &cacheResponse)
@@ -420,7 +418,7 @@ func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger, cacheD
 					},
 				},
 			}
-		} else if strings.Contains(cacheKey, "PersistedQueriesManifestQuery") {
+		} else if strings.Contains(cacheKey, uplink.PersistedQueriesQuery) {
 			var cachedResponse persistedqueries.UplinkPersistedQueryResponse
 			err := json.Unmarshal(content, &cachedResponse)
 			if err != nil {
@@ -479,7 +477,7 @@ func handleCacheMiss(config *config.Config, cache cache.Cache, httpClient *http.
 }
 
 // Handles requests to the relay endpoint.
-func RelayHandler(config *config.Config, currentCache cache.Cache, rrSelector *uplink.RoundRobinSelector, httpClient *http.Client, logger *slog.Logger) http.HandlerFunc {
+func RelayHandler(userConfig *config.Config, currentCache cache.Cache, rrSelector *uplink.RoundRobinSelector, httpClient *http.Client, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Debug log the request
 		logger.Debug("Received request", "method", r.Method, "path", r.URL.Path, "header", r.Header)
@@ -505,7 +503,7 @@ func RelayHandler(config *config.Config, currentCache cache.Cache, rrSelector *u
 		}
 
 		// Parse the GraphRef from the request
-		graphID, variantID, graphRefErr := ParseGraphRef(uplinkRequest.Variables["graph_ref"].(string))
+		graphID, variantID, graphRefErr := util.ParseGraphRef(uplinkRequest.Variables["graph_ref"].(string))
 		if graphRefErr != nil {
 			logger.Error("Failed to parse GraphRef from request body")
 			http.Error(w, "Bad Request", http.StatusBadRequest)
@@ -515,31 +513,59 @@ func RelayHandler(config *config.Config, currentCache cache.Cache, rrSelector *u
 		// Get the operation name from the request
 		operationName := uplinkRequest.OperationName
 
+		// Remove the api key from cache calculation to avoid uplink-relay having a different key making polling not work
+		delete(uplinkRequest.Variables, "apiKey")
+
 		// Make the cache key using the graphID, variantID, and operationName
 		cacheKey := cache.MakeCacheKey(graphID, variantID, operationName, uplinkRequest.Variables)
 		// If cache is enabled, attempt to retrieve the response from the cache
-		if config.Cache.Enabled {
+		if userConfig.Cache.Enabled {
 			// Check if the response is cached and return it if found
 			if cacheContent, keyFound := currentCache.Get(cacheKey); keyFound {
 				// Handle the cache hit
 				logger.Debug("Cache hit", "key", cacheKey, "operationName", operationName)
-				handleCacheHit(cacheKey, cacheContent, logger, time.Duration(config.Cache.Duration)*time.Second)(w, r)
+				handleCacheHit(cacheKey, cacheContent, logger, time.Duration(userConfig.Cache.Duration)*time.Second)(w, r)
 				return
 			}
 
+			supergraphConfig, err := config.FindSupergraphConfigFromGraphRef(uplinkRequest.Variables["graph_ref"].(string), userConfig)
+			if err != nil {
+				logger.Error("Failed to find supergraph config", "err", err)
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				return
+			}
+
+			// Set it to an empty string if it is nil to avoid panics
+			if uplinkRequest.Variables["ifAfterId"] == nil {
+				uplinkRequest.Variables["ifAfterId"] = ""
+			}
+
+			if operationName == uplink.SupergraphQuery && supergraphConfig.LaunchID != "" {
+				s, _ := pinning.HandlePinnedEntry(logger, currentCache, graphID, variantID, operationName, uplinkRequest.Variables["ifAfterId"].(string))
+				handleCacheHit(cacheKey, s, logger, time.Duration(userConfig.Cache.Duration)*time.Second)(w, r)
+				return
+			} else if operationName == uplink.LicenseQuery && supergraphConfig.OfflineLicense != "" {
+				s, _ := pinning.HandlePinnedEntry(logger, currentCache, graphID, variantID, operationName, uplinkRequest.Variables["ifAfterId"].(string))
+				handleCacheHit(cacheKey, s, logger, time.Duration(userConfig.Cache.Duration)*time.Second)(w, r)
+				return
+			} else if operationName == uplink.PersistedQueriesQuery && supergraphConfig.PersistedQueryVersion != "" {
+				s, _ := pinning.HandlePinnedEntry(logger, currentCache, graphID, variantID, operationName, uplinkRequest.Variables["ifAfterId"].(string))
+				handleCacheHit(cacheKey, s, logger, time.Duration(userConfig.Cache.Duration)*time.Second)(w, r)
+				return
+			}
 		}
 
 		// If the response is not cached, proxy the request to the uplink service
 		// and cache the response for future requests
-		logger.Info("Cache miss", "key", cacheKey)
+		logger.Debug("Cache miss", "key", cacheKey)
 
 		success := false
-		for attempt := 0; attempt <= config.Uplink.RetryCount && !success; attempt++ {
-			err := handleCacheMiss(config, currentCache, httpClient, rrSelector, cacheKey, uplinkRequest, logger)(w, r)
+		for attempt := 0; attempt <= userConfig.Uplink.RetryCount && !success; attempt++ {
+			err := handleCacheMiss(userConfig, currentCache, httpClient, rrSelector, cacheKey, uplinkRequest, logger)(w, r)
 			if err != nil {
 				logger.Error("Request to uplink failed", "attempt", attempt, "err", err)
-				if attempt == config.Uplink.RetryCount {
-					logger.Error("Failed to proxy request", "attempts", config.Uplink.RetryCount, "err", err)
+				if attempt == userConfig.Uplink.RetryCount {
+					logger.Error("Failed to proxy request", "attempts", userConfig.Uplink.RetryCount, "err", err)
 					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 					return
 				}
@@ -555,5 +581,16 @@ func RelayHandler(config *config.Config, currentCache cache.Cache, rrSelector *u
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
+	}
+}
+
+func HandlePinnedEntry(operationName string, systemCache cache.Cache, logger *slog.Logger) func(w http.ResponseWriter, r *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		switch operationName {
+
+		default:
+			break
+		}
+		return nil
 	}
 }

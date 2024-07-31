@@ -15,13 +15,14 @@ import (
 // Config represents the application's configuration structure,
 // housing Relay, Uplink, and Cache configurations.
 type Config struct {
-	Relay       RelayConfig        `yaml:"relay"`       // RelayConfig for incoming connections.
-	Uplink      UplinkConfig       `yaml:"uplink"`      // UplinkConfig for managing uplink configuration.
-	Cache       CacheConfig        `yaml:"cache"`       // CacheConfig for cache settings.
-	Redis       RedisConfig        `yaml:"redis"`       // RedisConfig for using redis as cache.
-	Supergraphs []SupergraphConfig `yaml:"supergraphs"` // SupergraphConfig for supergraph settings.
-	Webhook     WebhookConfig      `yaml:"webhook"`     // WebhookConfig for webhook handling.
-	Polling     PollingConfig      `yaml:"polling"`     // PollingConfig for polling settings.
+	Relay         RelayConfig         `yaml:"relay"`         // RelayConfig for incoming connections.
+	Uplink        UplinkConfig        `yaml:"uplink"`        // UplinkConfig for managing uplink configuration.
+	Cache         CacheConfig         `yaml:"cache"`         // CacheConfig for cache settings.
+	Redis         RedisConfig         `yaml:"redis"`         // RedisConfig for using redis as cache.
+	Supergraphs   []SupergraphConfig  `yaml:"supergraphs"`   // SupergraphConfig for supergraph settings.
+	Webhook       WebhookConfig       `yaml:"webhook"`       // WebhookConfig for webhook handling.
+	Polling       PollingConfig       `yaml:"polling"`       // PollingConfig for polling settings.
+	ManagementAPI ManagementAPIConfig `yaml:"managementAPI"` // ManagementAPIConfig for management API settings.
 }
 
 // RelayConfig defines the address the proxy server listens on.
@@ -79,15 +80,26 @@ type PollingConfig struct {
 
 // SupergraphConfig defines the list of graphs to use.
 type SupergraphConfig struct {
-	GraphRef  string `yaml:"graphRef"`
-	ApolloKey string `yaml:"apolloKey"`
+	GraphRef              string `yaml:"graphRef"`
+	ApolloKey             string `yaml:"apolloKey"`
+	LaunchID              string `yaml:"launchID"`
+	PersistedQueryVersion string `yaml:"persistedQueryVersion"`
+	OfflineLicense        string `yaml:"offlineLicense"`
 }
+
+type ManagementAPIConfig struct {
+	Enabled bool   `yaml:"enabled"` // Whether the management API is enabled.
+	Path    string `yaml:"path"`    // Path to bind the management API handler on.
+	Secret  string `yaml:"secret"`  // Secret for verifying management API requests.
+}
+
+var currentConfig *Config
 
 // NewDefaultConfig creates a new default configuration.
 func NewDefaultConfig() *Config {
 	pTrue := true
 	pFalse := false
-	return &Config{
+	currentConfig = &Config{
 		Relay: RelayConfig{
 			Address: "localhost:8080",
 			TLS:     RelayTlsConfig{},
@@ -113,8 +125,19 @@ func NewDefaultConfig() *Config {
 			Entitlements:     &pTrue,
 			Supergraph:       &pTrue,
 		},
+		ManagementAPI: ManagementAPIConfig{
+			Enabled: false,
+			Path:    "/graphql",
+			Secret:  "",
+		},
 	}
+
+	return currentConfig
 }
+
+type keyType string
+
+const ConfigKey keyType = "config"
 
 // MergeWithDefaultConfig merges the default configuration with the loaded configuration.
 func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableDebug *bool, logger *slog.Logger) *Config {
@@ -166,9 +189,14 @@ func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableD
 		loadedConfig.Polling.PersistedQueries = defaultConfig.Polling.PersistedQueries
 	}
 
+	if loadedConfig.ManagementAPI.Path == "" {
+		loadedConfig.ManagementAPI.Path = defaultConfig.ManagementAPI.Path
+	}
+
 	// Log the final configuration
 	logger.Debug("Uplink Relay configuration: %+v", "config", loadedConfig)
 
+	currentConfig = loadedConfig
 	return loadedConfig
 }
 
@@ -190,6 +218,15 @@ func LoadConfig(configPath string) (*Config, error) {
 	expandEnvInStruct(reflect.ValueOf(&config))
 
 	return &config, nil
+}
+
+func FindSupergraphConfigFromGraphRef(graphRef string, userConfig *Config) (*SupergraphConfig, error) {
+	for _, supergraph := range userConfig.Supergraphs {
+		if supergraph.GraphRef == graphRef {
+			return &supergraph, nil
+		}
+	}
+	return nil, fmt.Errorf("supergraph not found for graphRef: %s", graphRef)
 }
 
 // expandEnvInStruct expands environment variables in a struct.

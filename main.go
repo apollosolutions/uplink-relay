@@ -3,7 +3,9 @@
 package main
 
 import (
+	"context"
 	"flag"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,13 +16,17 @@ import (
 
 	"apollosolutions/uplink-relay/cache"
 	"apollosolutions/uplink-relay/config"
+	"apollosolutions/uplink-relay/graph"
 	"apollosolutions/uplink-relay/logger"
 	persistedqueries "apollosolutions/uplink-relay/persisted_queries"
+	"apollosolutions/uplink-relay/pinning"
 	"apollosolutions/uplink-relay/polling"
 	"apollosolutions/uplink-relay/proxy"
 	apolloredis "apollosolutions/uplink-relay/redis"
 	"apollosolutions/uplink-relay/uplink"
 	"apollosolutions/uplink-relay/webhooks"
+
+	"github.com/99designs/gqlgen/graphql/handler"
 )
 
 var (
@@ -72,33 +78,38 @@ func main() {
 	} else {
 		uplinkCache = cache.NewMemoryCache(mergedConfig.Cache.MaxSize)
 	}
-	// Initialize the round-robin URL selector.
-	rrSelector := uplink.NewRoundRobinSelector(mergedConfig.Uplink.URLs)
 
-	// Configure the HTTP client with a timeout.
-	httpClient := &http.Client{
-		Timeout: time.Duration(mergedConfig.Uplink.Timeout) * time.Second,
-	}
+	// Create a channel to stop polling on SIGHUP to avoid duplicate polling.
+	stopPolling := make(chan bool, 1)
 
-	// Set up the main request handler
-	proxy.RegisterHandlers("/*", proxy.RelayHandler(mergedConfig, uplinkCache, rrSelector, httpClient, logger))
-	proxy.RegisterHandlers("/persisted-queries/*", persistedqueries.PersistedQueryHandler(logger, httpClient, uplinkCache))
-	// Set up the webhook handler if enabled
-	if mergedConfig.Webhook.Enabled {
-		proxy.RegisterHandlers(mergedConfig.Webhook.Path, webhooks.WebhookHandler(mergedConfig, uplinkCache, httpClient, logger))
-	}
-
-	// Start the polling loop if enabled
-	if mergedConfig.Polling.Enabled {
-		go polling.StartPolling(mergedConfig, uplinkCache, httpClient, logger)
-	}
-
-	// Start the server and log its address.
-	server, err := proxy.StartServer(mergedConfig, logger)
+	server, err := startup(mergedConfig, logger, uplinkCache, stopPolling)
 	if err != nil {
 		logger.Error(err.Error())
 		os.Exit(1)
 	}
+
+	update := make(chan os.Signal, 1)
+	signal.Notify(update, syscall.SIGHUP)
+	go func() {
+		for sig := range update {
+			switch sig {
+			case syscall.SIGHUP:
+				logger.Info("Reloading configuration")
+				proxy.ShutdownServer(server, logger)
+				stopPolling <- true
+				newConfig, err := config.LoadConfig(*configPath)
+				if err != nil {
+					logger.Error("Could not load configuration", "err", err)
+					os.Exit(1)
+				}
+				server, err = startup(config.MergeWithDefaultConfig(defaultConfig, newConfig, enableDebug, logger), logger, uplinkCache, stopPolling)
+				if err != nil {
+					logger.Error(err.Error())
+					os.Exit(1)
+				}
+			}
+		}
+	}()
 
 	// Create a channel to listen for interrupt signals.
 	stop := make(chan os.Signal, 1)
@@ -109,4 +120,64 @@ func main() {
 
 	// Shut down the server
 	proxy.ShutdownServer(server, logger)
+}
+
+func startup(userConfig *config.Config, logger *slog.Logger, systemCache cache.Cache, stopPolling chan bool) (*http.Server, error) {
+	// Initialize the round-robin URL selector.
+	rrSelector := uplink.NewRoundRobinSelector(userConfig.Uplink.URLs)
+
+	// Configure the HTTP client with a timeout.
+	httpClient := &http.Client{
+		Timeout: time.Duration(userConfig.Uplink.Timeout) * time.Second,
+	}
+
+	proxy.DeregisterHandlers()
+	// Set up the main request handler
+	proxy.RegisterHandlers("/*", proxy.RelayHandler(userConfig, systemCache, rrSelector, httpClient, logger))
+	proxy.RegisterHandlers("/persisted-queries/*", persistedqueries.PersistedQueryHandler(logger, httpClient, systemCache))
+	// Set up the webhook handler if enabled
+	if userConfig.Webhook.Enabled {
+		proxy.RegisterHandlers(userConfig.Webhook.Path, webhooks.WebhookHandler(userConfig, systemCache, httpClient, logger))
+	}
+
+	// Start the polling loop if enabled
+	if userConfig.Polling.Enabled {
+		go polling.StartPolling(userConfig, systemCache, httpClient, logger, stopPolling)
+	}
+
+	for _, supergraph := range userConfig.Supergraphs {
+		if supergraph.LaunchID != "" {
+			logger.Debug("Pinning launch ID", "graphRef", supergraph.GraphRef, "launchID", supergraph.LaunchID)
+			err := pinning.PinLaunchID(userConfig, logger, systemCache, supergraph.LaunchID, supergraph.GraphRef)
+			if err != nil {
+				logger.Error("Failed to pin launch ID", "graphRef", supergraph.GraphRef, "launchID", supergraph.LaunchID)
+			}
+		}
+		if supergraph.OfflineLicense != "" {
+			logger.Debug("Offline license detected", "graphRef", supergraph.GraphRef)
+			err := pinning.PinOfflineLicense(userConfig, logger, systemCache, supergraph.OfflineLicense, supergraph.GraphRef)
+			if err != nil {
+				logger.Error("Failed to pin offline license", "graphRef", supergraph.GraphRef)
+			}
+		}
+	}
+	if userConfig.ManagementAPI.Enabled {
+		logger.Info("Management API enabled", "path", userConfig.ManagementAPI.Path)
+		graphqlHandler := handler.NewDefaultServer(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
+		logger.Info("Starting management API", "path", userConfig.ManagementAPI.Path)
+		proxy.RegisterHandlers(userConfig.ManagementAPI.Path, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Headers", "*")
+			ctx := context.WithValue(context.Background(), config.ConfigKey, userConfig)
+			graphqlHandler.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+	// Start the server and log its address.
+	server, err := proxy.StartServer(userConfig, logger)
+	if err != nil {
+		logger.Error(err.Error())
+		return nil, err
+	}
+
+	return server, nil
 }
