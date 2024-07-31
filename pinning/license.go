@@ -46,8 +46,17 @@ func PinOfflineLicense(userConfig *config.Config, logger *slog.Logger, systemCac
 
 	// Store the core schema in the cache
 	if userConfig.Cache.Enabled {
+		cacheEntry := cache.CacheItem{
+			Expiration: modifiedTime,
+			Content:    []byte(license),
+		}
+		cacheString, err := json.Marshal(cacheEntry)
+		if err != nil {
+			logger.Error("Failed to marshal cache entry", "error", err)
+			return err
+		}
 		cacheKey := cache.MakeCacheKey(graphID, variantID, LicensePinned)
-		insertPinnedCacheEntry(logger, systemCache, cacheKey, license, modifiedTime)
+		insertPinnedCacheEntry(logger, systemCache, cacheKey, string(cacheString[:]), modifiedTime)
 	}
 	return nil
 }

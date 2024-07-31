@@ -13,13 +13,13 @@ import (
 	"apollosolutions/uplink-relay/uplink"
 )
 
-const supergraphQuery = `{"query":"query SupergraphSdlQuery($apiKey: String!, $graph_ref: String!, $ifAfterId: ID) {\n    routerConfig(ref: $graph_ref, apiKey: $apiKey, ifAfterId: $ifAfterId) {\n            __typename\n            ... on RouterConfigResult {\n                    id\n                    supergraphSdl: supergraphSDL\n                    minDelaySeconds\n            }\n            ... on Unchanged {\n                    id\n                    minDelaySeconds\n            }\n            ... on FetchError {\n                    code\n                    message\n            }\n    }\n}","operationName":"SupergraphSdlQuery","variables":{"apiKey":"service:graph:1234","graph_ref":"pq-graph@local","ifAfterId":null}}`
+const supergraphQuery = `{"query":"query SupergraphSdlQuery($apiKey: String!, $graph_ref: String!, $ifAfterId: ID) {\n    routerConfig(ref: $graph_ref, apiKey: $apiKey, ifAfterId: $ifAfterId) {\n            __typename\n            ... on RouterConfigResult {\n                    id\n                    supergraphSdl: supergraphSDL\n                    minDelaySeconds\n            }\n            ... on Unchanged {\n                    id\n                    minDelaySeconds\n            }\n            ... on FetchError {\n                    code\n                    message\n            }\n    }\n}","operationName":"SupergraphSdlQuery","variables":{"apiKey":"service:graph:1234","graph_ref":"graph@local","ifAfterId":null}}`
 const supergraphResponse = `{"data":{"routerConfig":{"__typename":"RouterConfigResult","id":"2024-02-09T19:34:43.322688000Z","supergraphSdl":"mock supergraph sdl","minDelaySeconds":30}}}`
 
 const licenseQuery = `{"variables":{"apiKey":"service:graph:1234","graph_ref":"graph@local","ifAfterId":null},"query":"query LicenseQuery($apiKey: String!, $graph_ref: String!, $ifAfterId: ID) {\n\n    routerEntitlements(ifAfterId: $ifAfterId, apiKey: $apiKey, ref: $graph_ref) {\n        __typename\n        ... on RouterEntitlementsResult {\n            id\n            minDelaySeconds\n            entitlement {\n                jwt\n            }\n        }\n        ... on Unchanged {\n            id\n            minDelaySeconds\n        }\n        ... on FetchError {\n            code\n            message\n        }\n    }\n}\n","operationName":"LicenseQuery"}`
 const licenseResponse = `{"data":{"routerEntitlements":{"__typename":"RouterEntitlementsResult","id":"2024-08-02T12:00:00Z","minDelaySeconds":60.0,"entitlement":{"jwt":"bob"}}}}`
 
-const persistedQueriesQuery = `{"query":"query PersistedQueriesManifestQuery(\n    $apiKey: String!\n    $graph_ref: String!\n    $ifAfterId: ID\n) {\n    persistedQueries(ref: $graph_ref, apiKey: $apiKey, ifAfterId: $ifAfterId) {\n        __typename\n        ... on PersistedQueriesResult {\n            id\n            minDelaySeconds\n            chunks {\n                id\n                urls\n            }\n        }\n        ... on Unchanged {\n            id\n            minDelaySeconds\n        }\n        ... on FetchError {\n            code\n            message\n        }\n    }\n}\n","operationName":"PersistedQueriesManifestQuery","variables":{"apiKey":"service:graph:1234","graph_ref":"pq-graph@local","ifAfterId":null}}`
+const persistedQueriesQuery = `{"query":"query PersistedQueriesManifestQuery(\n    $apiKey: String!\n    $graph_ref: String!\n    $ifAfterId: ID\n) {\n    persistedQueries(ref: $graph_ref, apiKey: $apiKey, ifAfterId: $ifAfterId) {\n        __typename\n        ... on PersistedQueriesResult {\n            id\n            minDelaySeconds\n            chunks {\n                id\n                urls\n            }\n        }\n        ... on Unchanged {\n            id\n            minDelaySeconds\n        }\n        ... on FetchError {\n            code\n            message\n        }\n    }\n}\n","operationName":"PersistedQueriesManifestQuery","variables":{"apiKey":"service:graph:1234","graph_ref":"graph@local","ifAfterId":null}}`
 const persistedQueriesResponse = `{"data":{"persistedQueries":{"id":"id1","__typename":"PersistedQueriesResult","minDelaySeconds":60,"chunks":[{"id":"graph/1234","urls":["https://apollographql.com"]}]}}}`
 
 func TestRelayHandler(t *testing.T) {
@@ -51,6 +51,11 @@ func TestRelayHandler(t *testing.T) {
 		},
 	}
 
+	mockConfig.Supergraphs = []config.SupergraphConfig{
+		{
+			GraphRef: "graph@local",
+		},
+	}
 	// Create a mock HTTP client
 	mockHTTPClient := &http.Client{}
 
@@ -77,7 +82,7 @@ func TestRelayHandler(t *testing.T) {
 	if rr.Body.String() != licenseResponse {
 		t.Errorf("Expected response body '%s', but got '%s'", licenseResponse, rr.Body.String())
 	}
-	var key = cache.MakeCacheKey("graph", "local", "LicenseQuery", map[string]interface{}{"apiKey": "service:graph:1234", "graph_ref": "graph@local", "ifAfterId": nil})
+	var key = cache.MakeCacheKey("graph", "local", "LicenseQuery", map[string]interface{}{"graph_ref": "graph@local", "ifAfterId": nil})
 
 	// Assert that the response body is cached
 	if _, ok := mockCache.Get(key); !ok {
@@ -147,7 +152,7 @@ func TestHandleCacheHit(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	// Call the handleCacheHit function
-	err := handleCacheHit(cache.MakeCacheKey("graph", "local", uplink.LicenseQuery), []byte(licenseResponse), mockLogger, time.Duration(mockConfig.Cache.Duration)*time.Second)(rr, req)
+	err := handleCacheHit(cache.MakeCacheKey("graph", "local", uplink.LicenseQuery), []byte(licenseResponse), mockLogger, time.Duration(mockConfig.Cache.Duration)*time.Second, "")(rr, req)
 	if err != nil {
 		t.Errorf("Expected no error, but got %v", err)
 	}
@@ -162,7 +167,7 @@ func TestHandleCacheHit(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/", nil)
 
 	// Call the handleCacheHit again for the SupergraphQuery
-	err = handleCacheHit(cache.MakeCacheKey("graph", "local", uplink.SupergraphQuery), []byte("1234"), mockLogger, time.Duration(mockConfig.Cache.Duration)*time.Second)(rr, req)
+	err = handleCacheHit(cache.MakeCacheKey("graph", "local", uplink.SupergraphQuery), []byte("1234"), mockLogger, time.Duration(mockConfig.Cache.Duration)*time.Second, "")(rr, req)
 	if err != nil {
 		t.Errorf("Expected no error, but got %v", err)
 	}
@@ -177,7 +182,7 @@ func TestHandleCacheHit(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/", nil)
 
 	// Call the handleCacheHit again for the PersistedQueriesManifestQuery
-	err = handleCacheHit(cache.MakeCacheKey("graph", "local", uplink.PersistedQueriesQuery), []byte(persistedQueriesResponse), mockLogger, time.Duration(mockConfig.Cache.Duration)*time.Second)(rr, req)
+	err = handleCacheHit(cache.MakeCacheKey("graph", "local", uplink.PersistedQueriesQuery), []byte(persistedQueriesResponse), mockLogger, time.Duration(mockConfig.Cache.Duration)*time.Second, "")(rr, req)
 	if err != nil {
 		t.Errorf("Expected no error, but got %v", err)
 	}

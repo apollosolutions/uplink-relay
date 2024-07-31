@@ -23,11 +23,6 @@ import (
 	"apollosolutions/uplink-relay/uplink"
 )
 
-type JWTCacheEntry struct {
-	Expiration string `json:"expiration"`
-	Jwt        string `json:"jwt"`
-}
-
 // Register handlers for proxy routes.
 func RegisterHandlers(route string, handler http.HandlerFunc) {
 	http.HandleFunc(route, handler)
@@ -185,7 +180,7 @@ func debugResponseBody(logger *slog.Logger, r *http.Response) {
 }
 
 // Modifies the proxied response before it is returned to the client.
-func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey string, uplinkRequest UplinkRelayRequest, logger *slog.Logger) func(*http.Response) error {
+func modifyProxiedResponse(config *config.Config, systemCache cache.Cache, cacheKey string, uplinkRequest UplinkRelayRequest, logger *slog.Logger) func(*http.Response) error {
 	return func(resp *http.Response) error {
 		// Debug log the response headers
 		debugResponseHeaders(logger, resp.Header)
@@ -251,7 +246,7 @@ func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey st
 			// Cache the response for future requests.
 			if config.Cache.Enabled {
 				logger.Debug("Caching schema", "key", cacheKey)
-				cache.Set(cacheKey, schema, config.Cache.Duration)
+				systemCache.Set(cacheKey, schema, config.Cache.Duration)
 			}
 		} else if uplinkRequest.OperationName == uplink.LicenseQuery {
 			// Assert the type of the response
@@ -267,20 +262,24 @@ func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey st
 			if uplinkResponse.Data.RouterEntitlements.Entitlement != nil {
 				jwt = uplinkResponse.Data.RouterEntitlements.Entitlement.Jwt
 			}
-
+			expiration, err := time.Parse(time.RFC3339, uplinkResponse.Data.RouterEntitlements.ID)
+			if err != nil {
+				logger.Error("Failed to parse license expiration", "graphRef", uplinkRequest.Variables["graph_ref"], "err", err)
+				return err
+			}
 			// Cache the response for future requests, if caching is enabled
 			if config.Cache.Enabled {
 				logger.Debug("Caching JWT", "key", cacheKey)
-				cacheEntry := JWTCacheEntry{
-					Jwt:        jwt,
-					Expiration: uplinkResponse.Data.RouterEntitlements.ID,
+				cacheEntry := cache.CacheItem{
+					Content:    []byte(jwt),
+					Expiration: expiration,
 				}
 				cacheEntryBytes, err := json.Marshal(cacheEntry)
 				if err != nil {
 					logger.Error("Failed to marshal license", "err", err)
 					return err
 				}
-				cache.Set(cacheKey, string(cacheEntryBytes[:]), config.Cache.Duration)
+				systemCache.Set(cacheKey, string(cacheEntryBytes[:]), config.Cache.Duration)
 			}
 
 		} else if uplinkRequest.OperationName == uplink.PersistedQueriesQuery {
@@ -297,7 +296,7 @@ func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey st
 			// Cache the response for future requests, if caching is enabled
 			if config.Cache.Enabled {
 				logger.Debug("Caching PersistedQuery", "key", cacheKey)
-				chunks, err := persistedqueries.CachePersistedQueryChunkData(config, logger, cache, uplinkResponse.Data.PersistedQueries.Chunks)
+				chunks, err := persistedqueries.CachePersistedQueryChunkData(config, logger, systemCache, uplinkResponse.Data.PersistedQueries.Chunks)
 				if err != nil {
 					logger.Error("Failed to cache PersistedQuery chunks", "err", err)
 					return err
@@ -314,7 +313,7 @@ func modifyProxiedResponse(config *config.Config, cache cache.Cache, cacheKey st
 				resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(responseBody)))
 
 				// Cache the response
-				err = cache.Set(cacheKey, string(responseBody[:]), config.Cache.Duration)
+				err = systemCache.Set(cacheKey, string(responseBody[:]), config.Cache.Duration)
 				if err != nil {
 					logger.Error("Failed to cache response", "err", err)
 				}
@@ -366,7 +365,7 @@ func parseUrl(target string) (*url.URL, error) {
 }
 
 // Handles a cache hit by returning the cached response.
-func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger, cacheDuration time.Duration) func(w http.ResponseWriter, r *http.Request) error {
+func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger, cacheDuration time.Duration, ifAfterId string) func(w http.ResponseWriter, r *http.Request) error {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		var response interface{}
 
@@ -392,18 +391,31 @@ func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger, cacheD
 			}
 		} else if strings.Contains(cacheKey, uplink.LicenseQuery) {
 			typename := "RouterEntitlementsResult"
-			cacheResponse := JWTCacheEntry{}
+			cacheResponse := cache.CacheItem{}
 			err := json.Unmarshal(content, &cacheResponse)
 			if err != nil {
-				logger.Error("Failed to unmarshal JWT cache entry", "err", err)
+				logger.Error("Failed to unmarshal JWT cache entry", "err", err, "cacheKey", cacheKey, "content", string(content))
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				return nil
 			}
 
-			jwtEntitlement := &Jwt{Jwt: string(cacheResponse.Jwt)}
-			if len(cacheResponse.Jwt) == 0 {
+			jwtEntitlement := &Jwt{Jwt: string(cacheResponse.Content[:])}
+			if len(cacheResponse.Content) == 0 {
 				typename = "Unchanged"
 				jwtEntitlement = nil
+			}
+
+			if ifAfterId != "" {
+				ifAfterTime, err := time.Parse(time.RFC3339, ifAfterId)
+				if err != nil {
+					logger.Error("Failed to parse ifAfterId", "err", err)
+					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+					return nil
+				}
+				if cacheResponse.Expiration.Before(ifAfterTime) {
+					typename = "Unchanged"
+					jwtEntitlement = nil
+				}
 			}
 
 			response = &UplinkLicenseResponse{
@@ -411,9 +423,9 @@ func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger, cacheD
 					RouterEntitlements UplinkRouterEntitlements `json:"routerEntitlements"`
 				}{
 					RouterEntitlements: UplinkRouterEntitlements{
-						ID:              cacheResponse.Expiration,
+						ID:              cacheResponse.Expiration.Format(time.RFC3339),
 						Typename:        typename,
-						MinDelaySeconds: 10,
+						MinDelaySeconds: 60,
 						Entitlement:     jwtEntitlement,
 					},
 				},
@@ -524,7 +536,7 @@ func RelayHandler(userConfig *config.Config, currentCache cache.Cache, rrSelecto
 			if cacheContent, keyFound := currentCache.Get(cacheKey); keyFound {
 				// Handle the cache hit
 				logger.Debug("Cache hit", "key", cacheKey, "operationName", operationName)
-				handleCacheHit(cacheKey, cacheContent, logger, time.Duration(userConfig.Cache.Duration)*time.Second)(w, r)
+				handleCacheHit(cacheKey, cacheContent, logger, time.Duration(userConfig.Cache.Duration)*time.Second, uplinkRequest.Variables["ifAfterId"].(string))(w, r)
 				return
 			}
 
@@ -542,15 +554,15 @@ func RelayHandler(userConfig *config.Config, currentCache cache.Cache, rrSelecto
 
 			if operationName == uplink.SupergraphQuery && supergraphConfig.LaunchID != "" {
 				s, _ := pinning.HandlePinnedEntry(logger, currentCache, graphID, variantID, operationName, uplinkRequest.Variables["ifAfterId"].(string))
-				handleCacheHit(cacheKey, s, logger, time.Duration(userConfig.Cache.Duration)*time.Second)(w, r)
+				handleCacheHit(cacheKey, s, logger, time.Duration(userConfig.Cache.Duration)*time.Second, uplinkRequest.Variables["ifAfterId"].(string))(w, r)
 				return
 			} else if operationName == uplink.LicenseQuery && supergraphConfig.OfflineLicense != "" {
 				s, _ := pinning.HandlePinnedEntry(logger, currentCache, graphID, variantID, operationName, uplinkRequest.Variables["ifAfterId"].(string))
-				handleCacheHit(cacheKey, s, logger, time.Duration(userConfig.Cache.Duration)*time.Second)(w, r)
+				handleCacheHit(cacheKey, s, logger, time.Duration(userConfig.Cache.Duration)*time.Second, uplinkRequest.Variables["ifAfterId"].(string))(w, r)
 				return
 			} else if operationName == uplink.PersistedQueriesQuery && supergraphConfig.PersistedQueryVersion != "" {
 				s, _ := pinning.HandlePinnedEntry(logger, currentCache, graphID, variantID, operationName, uplinkRequest.Variables["ifAfterId"].(string))
-				handleCacheHit(cacheKey, s, logger, time.Duration(userConfig.Cache.Duration)*time.Second)(w, r)
+				handleCacheHit(cacheKey, s, logger, time.Duration(userConfig.Cache.Duration)*time.Second, uplinkRequest.Variables["ifAfterId"].(string))(w, r)
 				return
 			}
 		}

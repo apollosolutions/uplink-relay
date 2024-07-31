@@ -131,9 +131,16 @@ func pollForUpdates(userConfig *config.Config, systemCache cache.Cache, httpClie
 					logger.Error("Failed to fetch router license", "graphRef", supergraphConfig.GraphRef, "err", err)
 					break
 				}
-				cacheEntry := proxy.JWTCacheEntry{
-					Jwt:        licenseResponse.Data.RouterEntitlements.Entitlement.Jwt,
-					Expiration: licenseResponse.Data.RouterEntitlements.ID,
+
+				expiration, err := time.Parse(time.RFC3339, licenseResponse.Data.RouterEntitlements.ID)
+				if err != nil {
+					logger.Error("Failed to parse license expiration", "graphRef", supergraphConfig.GraphRef, "err", err)
+					break
+				}
+
+				cacheEntry := cache.CacheItem{
+					Content:    []byte(licenseResponse.Data.RouterEntitlements.Entitlement.Jwt),
+					Expiration: expiration,
 				}
 				cacheEntryBytes, err := json.Marshal(cacheEntry)
 				if err != nil {
