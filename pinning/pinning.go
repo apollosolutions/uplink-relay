@@ -86,7 +86,7 @@ func HandlePinnedEntry(logger *slog.Logger, systemCache cache.Cache, graphID, va
 		logger.Error("Failed to unmarshal pinned cache entry", "operationName", operationName)
 		return nil, true
 	}
-	logger.Info("Checking pinned cache entry", "operationName", operationName, "cacheLastModified", entry.LastModified, "ifAfterIdTime", ifAfterID, "cacheContent", entry.Content)
+	logger.Debug("Checking pinned cache entry", "operationName", operationName, "cacheLastModified", entry.LastModified, "ifAfterIdTime", ifAfterID)
 
 	// If a license query, simply return the content as the logic to handle is in proxy.go:390
 	if ifAfterID == "" {

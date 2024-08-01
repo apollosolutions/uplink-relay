@@ -412,7 +412,7 @@ func handleCacheHit(cacheKey string, content []byte, logger *slog.Logger, cacheD
 					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 					return nil
 				}
-				if cacheResponse.Expiration.Before(ifAfterTime) {
+				if cacheResponse.Expiration.Before(ifAfterTime) || cacheResponse.Expiration.Equal(ifAfterTime) {
 					typename = "Unchanged"
 					jwtEntitlement = nil
 				}
@@ -528,6 +528,11 @@ func RelayHandler(userConfig *config.Config, currentCache cache.Cache, rrSelecto
 		// Remove the api key from cache calculation to avoid uplink-relay having a different key making polling not work
 		delete(uplinkRequest.Variables, "apiKey")
 
+		// ensure that the ifAfterId is set to an empty string if it is nil to avoid panics
+		if uplinkRequest.Variables["ifAfterId"] == nil {
+			uplinkRequest.Variables["ifAfterId"] = ""
+		}
+
 		// Make the cache key using the graphID, variantID, and operationName
 		cacheKey := cache.MakeCacheKey(graphID, variantID, operationName, uplinkRequest.Variables)
 		// If cache is enabled, attempt to retrieve the response from the cache
@@ -583,7 +588,7 @@ func RelayHandler(userConfig *config.Config, currentCache cache.Cache, rrSelecto
 				}
 				logger.Warn("Retrying request", "operationName", operationName)
 			} else {
-				logger.Info("Successfully proxied request", "cacheKey", cacheKey)
+				logger.Info("Successfully proxied request", "cacheKey", cacheKey, "variables", uplinkRequest.Variables)
 				success = true
 				break
 			}
@@ -593,16 +598,5 @@ func RelayHandler(userConfig *config.Config, currentCache cache.Cache, rrSelecto
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
-	}
-}
-
-func HandlePinnedEntry(operationName string, systemCache cache.Cache, logger *slog.Logger) func(w http.ResponseWriter, r *http.Request) error {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		switch operationName {
-
-		default:
-			break
-		}
-		return nil
 	}
 }
