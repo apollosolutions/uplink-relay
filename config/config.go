@@ -317,7 +317,6 @@ func (c *Config) Validate() error {
 
 	// Validate Cache configuration
 	if c.Cache.Duration <= 0 && c.Cache.Duration != -1 {
-		fmt.Printf("duration: %d\n", c.Cache.Duration)
 		return fmt.Errorf("cache duration must be positive")
 	}
 	if c.Cache.MaxSize <= 0 {
@@ -333,7 +332,6 @@ func (c *Config) Validate() error {
 	if c.Polling.Enabled {
 		if len(c.Polling.Expressions) > 0 {
 			if c.Polling.Interval > 0 {
-				fmt.Printf("interval: %d\n", c.Polling.Interval)
 				return fmt.Errorf("cannot use both interval and cronExpressions for polling")
 			}
 			for _, expression := range c.Polling.Expressions {

@@ -76,7 +76,7 @@ func insertPinnedCacheEntry(logger *slog.Logger, systemCache cache.Cache, key st
 func HandlePinnedEntry(logger *slog.Logger, systemCache cache.Cache, graphID, variantID, operationName string, ifAfterID string) ([]byte, bool) {
 	rawEntry, ok := systemCache.Get(cache.MakeCacheKey(graphID, variantID, OperationMapping[operationName]))
 	if !ok {
-		logger.Info("No pinned cache entry found", "operationName", operationName)
+		logger.Debug("No pinned cache entry found", "operationName", operationName)
 		return nil, true
 	}
 
