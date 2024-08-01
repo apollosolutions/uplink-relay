@@ -262,6 +262,7 @@ func modifyProxiedResponse(config *config.Config, systemCache cache.Cache, cache
 			if uplinkResponse.Data.RouterEntitlements.Entitlement != nil {
 				jwt = uplinkResponse.Data.RouterEntitlements.Entitlement.Jwt
 			}
+                         // TODO: Add user docs on the time format supported 
 			expiration, err := time.Parse(time.RFC3339, uplinkResponse.Data.RouterEntitlements.ID)
 			if err != nil {
 				logger.Error("Failed to parse license expiration", "graphRef", uplinkRequest.Variables["graph_ref"], "err", err)
