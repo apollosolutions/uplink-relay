@@ -82,7 +82,7 @@ func TestRelayHandler(t *testing.T) {
 	if rr.Body.String() != licenseResponse {
 		t.Errorf("Expected response body '%s', but got '%s'", licenseResponse, rr.Body.String())
 	}
-	var key = cache.MakeCacheKey("graph", "local", "LicenseQuery", map[string]interface{}{"graph_ref": "graph@local", "ifAfterId": nil})
+	var key = cache.MakeCacheKey("graph", "local", "LicenseQuery", map[string]interface{}{"graph_ref": "graph@local", "ifAfterId": ""})
 
 	// Assert that the response body is cached
 	if _, ok := mockCache.Get(key); !ok {
