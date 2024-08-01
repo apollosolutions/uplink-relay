@@ -8,19 +8,21 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
 )
 
 // Config represents the application's configuration structure,
 // housing Relay, Uplink, and Cache configurations.
 type Config struct {
-	Relay       RelayConfig        `yaml:"relay"`       // RelayConfig for incoming connections.
-	Uplink      UplinkConfig       `yaml:"uplink"`      // UplinkConfig for managing uplink configuration.
-	Cache       CacheConfig        `yaml:"cache"`       // CacheConfig for cache settings.
-	Redis       RedisConfig        `yaml:"redis"`       // RedisConfig for using redis as cache.
-	Supergraphs []SupergraphConfig `yaml:"supergraphs"` // SupergraphConfig for supergraph settings.
-	Webhook     WebhookConfig      `yaml:"webhook"`     // WebhookConfig for webhook handling.
-	Polling     PollingConfig      `yaml:"polling"`     // PollingConfig for polling settings.
+	Relay         RelayConfig         `yaml:"relay"`         // RelayConfig for incoming connections.
+	Uplink        UplinkConfig        `yaml:"uplink"`        // UplinkConfig for managing uplink configuration.
+	Cache         CacheConfig         `yaml:"cache"`         // CacheConfig for cache settings.
+	Redis         RedisConfig         `yaml:"redis"`         // RedisConfig for using redis as cache.
+	Supergraphs   []SupergraphConfig  `yaml:"supergraphs"`   // SupergraphConfig for supergraph settings.
+	Webhook       WebhookConfig       `yaml:"webhook"`       // WebhookConfig for webhook handling.
+	Polling       PollingConfig       `yaml:"polling"`       // PollingConfig for polling settings.
+	ManagementAPI ManagementAPIConfig `yaml:"managementAPI"` // ManagementAPIConfig for management API settings.
 }
 
 // RelayConfig defines the address the proxy server listens on.
@@ -67,20 +69,37 @@ type WebhookConfig struct {
 
 // PollingConfig defines the configuration for polling from uplink.
 type PollingConfig struct {
-	Enabled    bool `yaml:"enabled"`    // Whether polling is enabled.
-	Interval   int  `yaml:"interval"`   // Interval for polling, in seconds.
-	RetryCount int  `yaml:"retryCount"` // Number of times to retry on polling failure.
+	Enabled          bool     `yaml:"enabled"`          // Whether polling is enabled.
+	Interval         int      `yaml:"interval"`         // Interval for polling, in seconds. Can only use either `interval` or `cronExpression`.
+	Expressions      []string `yaml:"cronExpressions"`  // Cron expression to use for polling. Can only use either `interval` or `cronExpression`.
+	RetryCount       int      `yaml:"retryCount"`       // Number of times to retry on polling failure.
+	Entitlements     *bool    `yaml:"entitlements"`     // Whether to poll for entitlements.
+	Supergraph       *bool    `yaml:"supergraph"`       // Whether to poll for supergraph.
+	PersistedQueries *bool    `yaml:"persistedQueries"` // Whether to poll for persisted queries.
 }
 
 // SupergraphConfig defines the list of graphs to use.
 type SupergraphConfig struct {
-	GraphRef  string `yaml:"graphRef"`
-	ApolloKey string `yaml:"apolloKey"`
+	GraphRef              string `yaml:"graphRef"`
+	ApolloKey             string `yaml:"apolloKey"`
+	LaunchID              string `yaml:"launchID"`
+	PersistedQueryVersion string `yaml:"persistedQueryVersion"`
+	OfflineLicense        string `yaml:"offlineLicense"`
 }
+
+type ManagementAPIConfig struct {
+	Enabled bool   `yaml:"enabled"` // Whether the management API is enabled.
+	Path    string `yaml:"path"`    // Path to bind the management API handler on.
+	Secret  string `yaml:"secret"`  // Secret for verifying management API requests.
+}
+
+var currentConfig *Config
 
 // NewDefaultConfig creates a new default configuration.
 func NewDefaultConfig() *Config {
-	return &Config{
+	pTrue := true
+	pFalse := false
+	currentConfig = &Config{
 		Relay: RelayConfig{
 			Address: "localhost:8080",
 			TLS:     RelayTlsConfig{},
@@ -101,11 +120,24 @@ func NewDefaultConfig() *Config {
 			Secret:  "",
 		},
 		Polling: PollingConfig{
-			Enabled:  false,
-			Interval: 60,
+			Enabled:          false,
+			PersistedQueries: &pFalse,
+			Entitlements:     &pTrue,
+			Supergraph:       &pTrue,
+		},
+		ManagementAPI: ManagementAPIConfig{
+			Enabled: false,
+			Path:    "/graphql",
+			Secret:  "",
 		},
 	}
+
+	return currentConfig
 }
+
+type keyType string
+
+const ConfigKey keyType = "config"
 
 // MergeWithDefaultConfig merges the default configuration with the loaded configuration.
 func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableDebug *bool, logger *slog.Logger) *Config {
@@ -125,7 +157,7 @@ func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableD
 		loadedConfig.Uplink.RetryCount = defaultConfig.Uplink.RetryCount
 	}
 
-	if loadedConfig.Cache.Duration == -1 {
+	if loadedConfig.Cache.Duration == 0 {
 		loadedConfig.Cache.Duration = defaultConfig.Cache.Duration
 	}
 
@@ -145,9 +177,26 @@ func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableD
 		loadedConfig.Polling.Interval = defaultConfig.Polling.Interval
 	}
 
+	if loadedConfig.Polling.Entitlements == nil {
+		loadedConfig.Polling.Entitlements = defaultConfig.Polling.Entitlements
+	}
+
+	if loadedConfig.Polling.Supergraph == nil {
+		loadedConfig.Polling.Supergraph = defaultConfig.Polling.Supergraph
+	}
+
+	if loadedConfig.Polling.PersistedQueries == nil {
+		loadedConfig.Polling.PersistedQueries = defaultConfig.Polling.PersistedQueries
+	}
+
+	if loadedConfig.ManagementAPI.Path == "" {
+		loadedConfig.ManagementAPI.Path = defaultConfig.ManagementAPI.Path
+	}
+
 	// Log the final configuration
 	logger.Debug("Uplink Relay configuration: %+v", "config", loadedConfig)
 
+	currentConfig = loadedConfig
 	return loadedConfig
 }
 
@@ -169,6 +218,15 @@ func LoadConfig(configPath string) (*Config, error) {
 	expandEnvInStruct(reflect.ValueOf(&config))
 
 	return &config, nil
+}
+
+func FindSupergraphConfigFromGraphRef(graphRef string, userConfig *Config) (*SupergraphConfig, error) {
+	for _, supergraph := range userConfig.Supergraphs {
+		if supergraph.GraphRef == graphRef {
+			return &supergraph, nil
+		}
+	}
+	return nil, fmt.Errorf("supergraph not found for graphRef: %s", graphRef)
 }
 
 // expandEnvInStruct expands environment variables in a struct.
@@ -258,7 +316,7 @@ func (c *Config) Validate() error {
 	}
 
 	// Validate Cache configuration
-	if c.Cache.Duration <= 0 {
+	if c.Cache.Duration <= 0 && c.Cache.Duration != -1 {
 		return fmt.Errorf("cache duration must be positive")
 	}
 	if c.Cache.MaxSize <= 0 {
@@ -268,6 +326,25 @@ func (c *Config) Validate() error {
 	// Validate Webhook configuration
 	if c.Webhook.Enabled && c.Webhook.Path == "" {
 		return fmt.Errorf("webhook path cannot be empty when webhook is enabled")
+	}
+
+	// Validate Polling configuration
+	if c.Polling.Enabled {
+		if len(c.Polling.Expressions) > 0 {
+			if c.Polling.Interval > 0 {
+				return fmt.Errorf("cannot use both interval and cronExpressions for polling")
+			}
+			for _, expression := range c.Polling.Expressions {
+				if _, err := cron.ParseStandard(expression); err != nil {
+					return fmt.Errorf("invalid cron expression: %s", err)
+				}
+			}
+		} else {
+			if c.Polling.Interval <= 0 {
+				return fmt.Errorf("polling interval must be positive")
+			}
+
+		}
 	}
 
 	return nil

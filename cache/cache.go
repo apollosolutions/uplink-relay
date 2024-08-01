@@ -15,8 +15,8 @@ type Cache interface {
 
 // CacheItem represents a single cached item.
 type CacheItem struct {
-	Content    []byte    // Byte content of the cached item.
-	Expiration time.Time // Expiration time of the cached item.
+	Content    []byte    `json:"content"`    // Byte content of the cached item.
+	Expiration time.Time `json:"expiration"` // Expiration time of the cached item.
 }
 
 // MemoryCache provides a simple in-memory cache.

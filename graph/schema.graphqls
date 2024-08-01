@@ -1,0 +1,152 @@
+type Query {
+  """
+  Returns the health status of the uplink-relay service.
+  This will also apply the correct status code to the response- 200 for OK, 503 for DOWN.
+  """
+  health: HealthStatus!
+
+  """
+  Returns the current details of the given uplink relay.
+  """
+  currentConfiguration: Configuration!
+}
+
+type Mutation {
+  """
+  Delete cache entries for a given input.
+  """
+  deleteCacheEntry(input: DeleteCacheEntryInput!): DeleteCacheEntryResult!
+
+  """
+  Pins a given schema to a launch ID
+  """
+  pinSchema(input: PinSchemaInput!): PinSchemaResult!
+
+  """
+  Pins a given persisted query manifest to an ID
+  """
+  pinPersistedQueryManifest(
+    input: PinPersistedQueryManifestInput!
+  ): PinPersistedQueryManifestResult!
+
+  """
+  Force updates the uplink relay, similar to the polling funcionality.
+  This will cause the uplink relay to fetch the latest schema, entitlement, and persisted query manifest.
+  """
+  forceUpdate(input: ForceUpdateInput): ForceUpdateResult!
+}
+
+enum HealthStatus {
+  OK
+  DOWN
+}
+
+type Supergraph {
+  """
+  The ID of the uplink relay.
+  """
+  graphRef: ID!
+  """
+  The schema ID pinned to the uplink relay.
+  This will be null if the service has not received a request for the schema.
+  """
+  currentSchema: Schema
+
+  """
+  The persisted query manifest ID pinned to the uplink relay.
+  This will be null if the service is not using persisted queries
+  """
+  persistedQueryManifestId: PersistedQueryManifest
+
+  """
+  The schema ID pinned to the uplink relay.
+  This will be null if the service has not pinned the schema launch ID.
+  """
+  pinnedSchemaID: String
+
+  """
+  The persisted query manifest ID pinned to the uplink relay.
+  This will be null if the service has not pinned the persisted query manifest ID.
+  """
+  pinnedPersistedQueryManifestID: String
+}
+
+type Configuration {
+  """
+  The uplink relay's list of supported supergraphs.
+  """
+  supergraphs: [Supergraph!]!
+
+  """
+  The URL of the uplink relay.
+  """
+  url: String!
+}
+
+type Schema {
+  """
+  The ID of the schema.
+  """
+  id: ID!
+
+  """
+  The hash of the schema.
+  """
+  hash: String!
+
+  """
+  The schema itself.
+  """
+  schema: String!
+}
+
+input DeleteCacheEntryInput {
+  operation: [OperationType!]!
+  graphRef: ID!
+}
+
+enum OperationType {
+  SCHEMA
+  ENTITLEMENT
+  PERSISTED_QUERY_MANIFEST
+}
+
+type DeleteCacheEntryResult {
+  success: Boolean!
+  configuration: Configuration!
+}
+
+input PinSchemaInput {
+  launchID: String!
+  graphRef: ID!
+}
+
+type PinSchemaResult {
+  success: Boolean!
+  configuration: Configuration!
+}
+
+input PinPersistedQueryManifestInput {
+  id: String!
+}
+
+type PinPersistedQueryManifestResult {
+  success: Boolean!
+  configuration: Configuration!
+}
+
+input ForceUpdateInput {
+  operations: [OperationType!]!
+  graphRef: ID!
+}
+
+type ForceUpdateResult {
+  success: Boolean!
+  configuration: Configuration!
+}
+
+type PersistedQueryManifest {
+  id: ID!
+  hash: String!
+  persistedQueryManifest: [String!]!
+}

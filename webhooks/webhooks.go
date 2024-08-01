@@ -15,7 +15,7 @@ import (
 
 	"apollosolutions/uplink-relay/cache"
 	"apollosolutions/uplink-relay/config"
-	"apollosolutions/uplink-relay/proxy"
+	"apollosolutions/uplink-relay/internal/util"
 )
 
 type SchemaChange struct {
@@ -33,7 +33,7 @@ type WebhookData struct {
 	Timestamp          time.Time      `json:"timestamp"`
 }
 
-func WebhookHandler(config *config.Config, systemCache cache.Cache, httpClient *http.Client, logger *slog.Logger) http.HandlerFunc {
+func WebhookHandler(userConfig *config.Config, systemCache cache.Cache, httpClient *http.Client, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Verify the request signature
 		signatureHeader := r.Header.Get("x-apollo-signature")
@@ -50,7 +50,7 @@ func WebhookHandler(config *config.Config, systemCache cache.Cache, httpClient *
 		}
 
 		// Verify the signature
-		secret := config.Webhook.Secret
+		secret := userConfig.Webhook.Secret
 		if secret == "" {
 			http.Error(w, "Webhook secret not configured", http.StatusBadRequest)
 			return
@@ -88,7 +88,7 @@ func WebhookHandler(config *config.Config, systemCache cache.Cache, httpClient *
 
 		// Check if the variantID is in the list of graphs from the configuration
 		// webhook variantID is in the format of a GraphRef
-		if !containsGraph(config.Supergraphs, data.VariantID) {
+		if !containsGraph(userConfig.Supergraphs, data.VariantID) {
 			http.Error(w, fmt.Sprintf("VariantID %s not found in the list of supergraphs", data.VariantID), http.StatusBadRequest)
 			return
 		}
@@ -111,19 +111,19 @@ func WebhookHandler(config *config.Config, systemCache cache.Cache, httpClient *
 		schema := string(response)
 
 		// Parse the GraphID and VariantID from the webhook data
-		graphID, variantID, err := proxy.ParseGraphRef(data.VariantID)
+		graphID, variantID, err := util.ParseGraphRef(data.VariantID)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to parse variantID from webhook: %s", data.VariantID), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("Failed to find supergraph config: %v", err), http.StatusInternalServerError)
 			return
 		}
 
-		if config.Cache.Enabled {
+		if userConfig.Cache.Enabled {
 			// Create a cache key using the GraphID, VariantID
 			cacheKey := cache.MakeCacheKey(graphID, variantID, "SupergraphSdlQuery")
 			// Update the cache using the fetched schema
-			systemCache.Set(cacheKey, schema, config.Cache.Duration)
+			systemCache.Set(cacheKey, schema, userConfig.Cache.Duration)
 		} else {
-			logger.Info("Cache is disabled, skipping cache update for GraphID %s, VariantID %s", graphID, variantID)
+			logger.Debug("Cache is disabled, skipping cache update for GraphID", "graphRef", data.VariantID)
 		}
 
 		// Send a response back to the webhook sender
