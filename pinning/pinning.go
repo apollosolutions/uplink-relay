@@ -3,6 +3,7 @@ package pinning
 import (
 	"apollosolutions/uplink-relay/cache"
 	"apollosolutions/uplink-relay/config"
+	"apollosolutions/uplink-relay/internal/util"
 	"apollosolutions/uplink-relay/uplink"
 	"encoding/json"
 	"fmt"
@@ -19,11 +20,6 @@ type PinningAPIRequest struct {
 	Query         string                 `json:"query"`
 	Variables     map[string]interface{} `json:"variables"`
 	OperationName string                 `json:"operationName"`
-}
-
-type PinnedCacheEntry struct {
-	LastModified string `json:"lastModified"`
-	Content      string `json:"content"`
 }
 
 const (
@@ -56,10 +52,13 @@ func findAPIKey(userConfig *config.Config, graphRef string) (string, error) {
 	return "", fmt.Errorf("API key not found for graphRef %s", graphRef)
 }
 
-func insertPinnedCacheEntry(logger *slog.Logger, systemCache cache.Cache, key string, value string, modifiedTime time.Time) {
-	content := PinnedCacheEntry{
-		LastModified: modifiedTime.Format(time.RFC3339),
-		Content:      value,
+func insertPinnedCacheEntry(logger *slog.Logger, systemCache cache.Cache, key string, value string, id string, modifiedTime time.Time) {
+	content := cache.CacheItem{
+		LastModified: modifiedTime,
+		Content:      []byte(value),
+		Hash:         util.HashString(value),
+		Expiration:   cache.ExpirationTime(-1),
+		ID:           id,
 	}
 
 	cacheEntry, err := json.Marshal(content)
@@ -73,54 +72,51 @@ func insertPinnedCacheEntry(logger *slog.Logger, systemCache cache.Cache, key st
 // handlePinnedEntry is a helper function that retrieves the pinned cache entry for the given operation name if it exists, otherwise returns true on the second param
 // to indicate it is not newer than the given ifAfterId
 // Return arguments are effectively: content, unchanged
-func HandlePinnedEntry(logger *slog.Logger, systemCache cache.Cache, graphID, variantID, operationName string, ifAfterID string) ([]byte, bool) {
-	rawEntry, ok := systemCache.Get(cache.MakeCacheKey(graphID, variantID, OperationMapping[operationName]))
+func HandlePinnedEntry(logger *slog.Logger, systemCache cache.Cache, graphID, variantID, operationName string, ifAfterID string) (*cache.CacheItem, error) {
+	rawEntry, ok := systemCache.Get(cache.MakeCacheKey(fmt.Sprintf("%s@%s", graphID, variantID), OperationMapping[operationName]))
 	if !ok {
 		logger.Debug("No pinned cache entry found", "operationName", operationName)
-		return nil, true
+		return nil, nil
 	}
 
-	var entry PinnedCacheEntry
+	var entry cache.CacheItem
 	err := json.Unmarshal([]byte(rawEntry), &entry)
 	if err != nil {
 		logger.Error("Failed to unmarshal pinned cache entry", "operationName", operationName)
-		return nil, true
+		return nil, err
 	}
 	logger.Debug("Checking pinned cache entry", "operationName", operationName, "cacheLastModified", entry.LastModified, "ifAfterIdTime", ifAfterID)
 
 	// If a license query, simply return the content as the logic to handle is in proxy.go:390
 	if ifAfterID == "" {
-		return []byte(entry.Content), false
-	}
-
-	cacheLastModified, err := time.Parse(time.RFC3339, entry.LastModified)
-	if err != nil {
-		logger.Error("Failed to parse last modified time", "operationName", operationName)
-		return nil, true
+		return &entry, nil
 	}
 
 	// skipping for now as the ID format is different
 	if operationName == uplink.PersistedQueriesQuery {
-		if cacheLastModified.After(time.Now()) {
-			return []byte(entry.Content), false
+		if entry.LastModified.After(time.Now()) {
+			return &entry, nil
 		}
 
-		return nil, true
+		return nil, nil
 	}
 
 	ifAfterIDTime, err := time.Parse("2006-01-02T15:04:05Z0700", ifAfterID)
 	if err != nil {
 		logger.Error("Failed to parse ifAfterId time", "operationName", operationName)
-		return nil, true
+		return nil, err
 	}
 
 	if operationName == uplink.LicenseQuery {
-		return []byte(entry.Content), false
+		return &entry, nil
 	}
 
-	if cacheLastModified.After(ifAfterIDTime) {
-		return []byte(entry.Content), false
+	// The entry's last modified time is newer than the ifAfterId time, return the entry in it's entirety
+	// ifAfterId indicates the last time the client has seen the data, and as such, a newly modified entry indicates the client should receive the new data
+	if entry.LastModified.After(ifAfterIDTime) {
+		return &entry, nil
 	}
 
-	return nil, true
+	entry.Content = nil
+	return &entry, nil
 }

@@ -15,7 +15,6 @@ import (
 
 	"apollosolutions/uplink-relay/cache"
 	"apollosolutions/uplink-relay/config"
-	"apollosolutions/uplink-relay/internal/util"
 )
 
 type SchemaChange struct {
@@ -110,16 +109,14 @@ func WebhookHandler(userConfig *config.Config, systemCache cache.Cache, httpClie
 		// Convert the schema to a string
 		schema := string(response)
 
-		// Parse the GraphID and VariantID from the webhook data
-		graphID, variantID, err := util.ParseGraphRef(data.VariantID)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to find supergraph config: %v", err), http.StatusInternalServerError)
-			return
-		}
-
 		if userConfig.Cache.Enabled {
 			// Create a cache key using the GraphID, VariantID
-			cacheKey := cache.MakeCacheKey(graphID, variantID, "SupergraphSdlQuery")
+			cacheKey := cache.MakeCacheKey(data.VariantID, "SupergraphSdlQuery")
+			if cacheKey == "" {
+				logger.Error("Failed to create cache key", "graphRef", data.VariantID)
+				http.Error(w, "Failed to create cache key", http.StatusInternalServerError)
+				return
+			}
 			// Update the cache using the fetched schema
 			systemCache.Set(cacheKey, schema, userConfig.Cache.Duration)
 		} else {

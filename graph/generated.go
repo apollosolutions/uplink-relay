@@ -64,7 +64,7 @@ type ComplexityRoot struct {
 
 	Mutation struct {
 		DeleteCacheEntry          func(childComplexity int, input model.DeleteCacheEntryInput) int
-		ForceUpdate               func(childComplexity int, input *model.ForceUpdateInput) int
+		ForceUpdate               func(childComplexity int, input model.ForceUpdateInput) int
 		PinPersistedQueryManifest func(childComplexity int, input model.PinPersistedQueryManifestInput) int
 		PinSchema                 func(childComplexity int, input model.PinSchemaInput) int
 	}
@@ -100,8 +100,8 @@ type ComplexityRoot struct {
 		CurrentSchema                  func(childComplexity int) int
 		GraphRef                       func(childComplexity int) int
 		PersistedQueryManifestID       func(childComplexity int) int
+		PinnedLaunchID                 func(childComplexity int) int
 		PinnedPersistedQueryManifestID func(childComplexity int) int
-		PinnedSchemaID                 func(childComplexity int) int
 	}
 }
 
@@ -109,7 +109,7 @@ type MutationResolver interface {
 	DeleteCacheEntry(ctx context.Context, input model.DeleteCacheEntryInput) (*model.DeleteCacheEntryResult, error)
 	PinSchema(ctx context.Context, input model.PinSchemaInput) (*model.PinSchemaResult, error)
 	PinPersistedQueryManifest(ctx context.Context, input model.PinPersistedQueryManifestInput) (*model.PinPersistedQueryManifestResult, error)
-	ForceUpdate(ctx context.Context, input *model.ForceUpdateInput) (*model.ForceUpdateResult, error)
+	ForceUpdate(ctx context.Context, input model.ForceUpdateInput) (*model.ForceUpdateResult, error)
 }
 type QueryResolver interface {
 	Health(ctx context.Context) (model.HealthStatus, error)
@@ -199,7 +199,7 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Mutation.ForceUpdate(childComplexity, args["input"].(*model.ForceUpdateInput)), true
+		return e.complexity.Mutation.ForceUpdate(childComplexity, args["input"].(model.ForceUpdateInput)), true
 
 	case "Mutation.pinPersistedQueryManifest":
 		if e.complexity.Mutation.PinPersistedQueryManifest == nil {
@@ -323,12 +323,19 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Supergraph.GraphRef(childComplexity), true
 
-	case "Supergraph.persistedQueryManifestId":
+	case "Supergraph.persistedQueryManifestID":
 		if e.complexity.Supergraph.PersistedQueryManifestID == nil {
 			break
 		}
 
 		return e.complexity.Supergraph.PersistedQueryManifestID(childComplexity), true
+
+	case "Supergraph.pinnedLaunchID":
+		if e.complexity.Supergraph.PinnedLaunchID == nil {
+			break
+		}
+
+		return e.complexity.Supergraph.PinnedLaunchID(childComplexity), true
 
 	case "Supergraph.pinnedPersistedQueryManifestID":
 		if e.complexity.Supergraph.PinnedPersistedQueryManifestID == nil {
@@ -336,13 +343,6 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.Supergraph.PinnedPersistedQueryManifestID(childComplexity), true
-
-	case "Supergraph.pinnedSchemaID":
-		if e.complexity.Supergraph.PinnedSchemaID == nil {
-			break
-		}
-
-		return e.complexity.Supergraph.PinnedSchemaID(childComplexity), true
 
 	}
 	return 0, false
@@ -490,10 +490,10 @@ func (ec *executionContext) field_Mutation_deleteCacheEntry_args(ctx context.Con
 func (ec *executionContext) field_Mutation_forceUpdate_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
 	args := map[string]interface{}{}
-	var arg0 *model.ForceUpdateInput
+	var arg0 model.ForceUpdateInput
 	if tmp, ok := rawArgs["input"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
-		arg0, err = ec.unmarshalOForceUpdateInput2ᚖapollosolutionsᚋuplinkᚑrelayᚋgraphᚋmodelᚐForceUpdateInput(ctx, tmp)
+		arg0, err = ec.unmarshalNForceUpdateInput2apollosolutionsᚋuplinkᚑrelayᚋgraphᚋmodelᚐForceUpdateInput(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -628,10 +628,10 @@ func (ec *executionContext) fieldContext_Configuration_supergraphs(_ context.Con
 				return ec.fieldContext_Supergraph_graphRef(ctx, field)
 			case "currentSchema":
 				return ec.fieldContext_Supergraph_currentSchema(ctx, field)
-			case "persistedQueryManifestId":
-				return ec.fieldContext_Supergraph_persistedQueryManifestId(ctx, field)
-			case "pinnedSchemaID":
-				return ec.fieldContext_Supergraph_pinnedSchemaID(ctx, field)
+			case "persistedQueryManifestID":
+				return ec.fieldContext_Supergraph_persistedQueryManifestID(ctx, field)
+			case "pinnedLaunchID":
+				return ec.fieldContext_Supergraph_pinnedLaunchID(ctx, field)
 			case "pinnedPersistedQueryManifestID":
 				return ec.fieldContext_Supergraph_pinnedPersistedQueryManifestID(ctx, field)
 			}
@@ -1070,7 +1070,7 @@ func (ec *executionContext) _Mutation_forceUpdate(ctx context.Context, field gra
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Mutation().ForceUpdate(rctx, fc.Args["input"].(*model.ForceUpdateInput))
+		return ec.resolvers.Mutation().ForceUpdate(rctx, fc.Args["input"].(model.ForceUpdateInput))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1885,8 +1885,8 @@ func (ec *executionContext) fieldContext_Supergraph_currentSchema(_ context.Cont
 	return fc, nil
 }
 
-func (ec *executionContext) _Supergraph_persistedQueryManifestId(ctx context.Context, field graphql.CollectedField, obj *model.Supergraph) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_Supergraph_persistedQueryManifestId(ctx, field)
+func (ec *executionContext) _Supergraph_persistedQueryManifestID(ctx context.Context, field graphql.CollectedField, obj *model.Supergraph) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Supergraph_persistedQueryManifestID(ctx, field)
 	if err != nil {
 		return graphql.Null
 	}
@@ -1913,7 +1913,7 @@ func (ec *executionContext) _Supergraph_persistedQueryManifestId(ctx context.Con
 	return ec.marshalOPersistedQueryManifest2ᚖapollosolutionsᚋuplinkᚑrelayᚋgraphᚋmodelᚐPersistedQueryManifest(ctx, field.Selections, res)
 }
 
-func (ec *executionContext) fieldContext_Supergraph_persistedQueryManifestId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Supergraph_persistedQueryManifestID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Supergraph",
 		Field:      field,
@@ -1934,8 +1934,8 @@ func (ec *executionContext) fieldContext_Supergraph_persistedQueryManifestId(_ c
 	return fc, nil
 }
 
-func (ec *executionContext) _Supergraph_pinnedSchemaID(ctx context.Context, field graphql.CollectedField, obj *model.Supergraph) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_Supergraph_pinnedSchemaID(ctx, field)
+func (ec *executionContext) _Supergraph_pinnedLaunchID(ctx context.Context, field graphql.CollectedField, obj *model.Supergraph) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Supergraph_pinnedLaunchID(ctx, field)
 	if err != nil {
 		return graphql.Null
 	}
@@ -1948,7 +1948,7 @@ func (ec *executionContext) _Supergraph_pinnedSchemaID(ctx context.Context, fiel
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.PinnedSchemaID, nil
+		return obj.PinnedLaunchID, nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1962,7 +1962,7 @@ func (ec *executionContext) _Supergraph_pinnedSchemaID(ctx context.Context, fiel
 	return ec.marshalOString2ᚖstring(ctx, field.Selections, res)
 }
 
-func (ec *executionContext) fieldContext_Supergraph_pinnedSchemaID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Supergraph_pinnedLaunchID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Supergraph",
 		Field:      field,
@@ -3864,7 +3864,7 @@ func (ec *executionContext) unmarshalInputPinPersistedQueryManifestInput(ctx con
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"id"}
+	fieldsInOrder := [...]string{"id", "graphRef"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -3878,6 +3878,13 @@ func (ec *executionContext) unmarshalInputPinPersistedQueryManifestInput(ctx con
 				return it, err
 			}
 			it.ID = data
+		case "graphRef":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("graphRef"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.GraphRef = data
 		}
 	}
 
@@ -4426,10 +4433,10 @@ func (ec *executionContext) _Supergraph(ctx context.Context, sel ast.SelectionSe
 			}
 		case "currentSchema":
 			out.Values[i] = ec._Supergraph_currentSchema(ctx, field, obj)
-		case "persistedQueryManifestId":
-			out.Values[i] = ec._Supergraph_persistedQueryManifestId(ctx, field, obj)
-		case "pinnedSchemaID":
-			out.Values[i] = ec._Supergraph_pinnedSchemaID(ctx, field, obj)
+		case "persistedQueryManifestID":
+			out.Values[i] = ec._Supergraph_persistedQueryManifestID(ctx, field, obj)
+		case "pinnedLaunchID":
+			out.Values[i] = ec._Supergraph_pinnedLaunchID(ctx, field, obj)
 		case "pinnedPersistedQueryManifestID":
 			out.Values[i] = ec._Supergraph_pinnedPersistedQueryManifestID(ctx, field, obj)
 		default:
@@ -4827,6 +4834,11 @@ func (ec *executionContext) marshalNDeleteCacheEntryResult2ᚖapollosolutionsᚋ
 		return graphql.Null
 	}
 	return ec._DeleteCacheEntryResult(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNForceUpdateInput2apollosolutionsᚋuplinkᚑrelayᚋgraphᚋmodelᚐForceUpdateInput(ctx context.Context, v interface{}) (model.ForceUpdateInput, error) {
+	res, err := ec.unmarshalInputForceUpdateInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNForceUpdateResult2apollosolutionsᚋuplinkᚑrelayᚋgraphᚋmodelᚐForceUpdateResult(ctx context.Context, sel ast.SelectionSet, v model.ForceUpdateResult) graphql.Marshaler {
@@ -5355,14 +5367,6 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	}
 	res := graphql.MarshalBoolean(*v)
 	return res
-}
-
-func (ec *executionContext) unmarshalOForceUpdateInput2ᚖapollosolutionsᚋuplinkᚑrelayᚋgraphᚋmodelᚐForceUpdateInput(ctx context.Context, v interface{}) (*model.ForceUpdateInput, error) {
-	if v == nil {
-		return nil, nil
-	}
-	res, err := ec.unmarshalInputForceUpdateInput(ctx, v)
-	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalOPersistedQueryManifest2ᚖapollosolutionsᚋuplinkᚑrelayᚋgraphᚋmodelᚐPersistedQueryManifest(ctx context.Context, sel ast.SelectionSet, v *model.PersistedQueryManifest) graphql.Marshaler {

@@ -5,6 +5,7 @@ go 1.22.2
 require (
 	github.com/99designs/gqlgen v0.17.49
 	github.com/alicebob/miniredis/v2 v2.33.0
+	github.com/go-jose/go-jose v2.6.3+incompatible
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/robfig/cron/v3 v3.0.0
 	github.com/vektah/gqlparser/v2 v2.5.16
@@ -15,7 +16,6 @@ require (
 	github.com/agnivade/levenshtein v1.1.1 // indirect
 	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
-	github.com/go-jose/go-jose v2.6.3+incompatible // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect

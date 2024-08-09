@@ -1,9 +1,10 @@
 package cache
 
 import (
-	"crypto/sha256"
+	"apollosolutions/uplink-relay/internal/util"
+	"encoding/json"
 	"fmt"
-	"sync"
+	"log/slog"
 	"time"
 )
 
@@ -11,86 +12,92 @@ import (
 type Cache interface {
 	Get(key string) ([]byte, bool)                      // Get retrieves an item from the cache if it exists and hasn't expired.
 	Set(key string, content string, duration int) error // Set adds an item to the cache with a specified duration until expiration.
+	DeleteWithPrefix(prefix string) error
 }
+
+type keyType string
+
+const CacheKey keyType = "cache"
+
+const CurrentStatusKey string = "current"
+
+var IndefiniteTimestamp = time.Unix(0, 0)
 
 // CacheItem represents a single cached item.
 type CacheItem struct {
-	Content    []byte    `json:"content"`    // Byte content of the cached item.
-	Expiration time.Time `json:"expiration"` // Expiration time of the cached item.
+	Content      []byte    `json:"content"`      // Byte content of the cached item.
+	Expiration   time.Time `json:"expiration"`   // Expiration time of the cached item for in-memory use.
+	Hash         string    `json:"hash"`         // sha256 hash of the cached item.
+	LastModified time.Time `json:"lastModified"` // Last modified time of the cached item.
+	ID           string    `json:"id"`           // ID of the cached item.
 }
 
-// MemoryCache provides a simple in-memory cache.
-type MemoryCache struct {
-	items        map[string]*CacheItem // Map of cache keys to CacheItems.
-	mu           sync.RWMutex          // Read/Write mutex for thread-safe access.
-	maxItems     int                   // Maximum size of the cache.
-	currentItems int                   // Current size of the cache.
-}
-
-// NewMemoryCache initializes a new empty MemoryCache.
-func NewMemoryCache(maxItems int) *MemoryCache {
-	return &MemoryCache{items: make(map[string]*CacheItem), maxItems: maxItems}
-}
-
-// Get retrieves an item from the cache if it exists and hasn't expired.
-func (c *MemoryCache) Get(key string) ([]byte, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	item, found := c.items[key]
-
-	// If the item is not found or has expired, return a cache miss.
-	// The special case of time.Unix(1<<63-1, 0) is used to indicate that an item never expires- and
-	// time.Before will always return true for this case.
-	if !found || timeBeforeWithIndefinite(item.Expiration, time.Now()) {
-		return nil, false
-	}
-	return item.Content, true
-}
-
-// Set adds an item to the cache with a specified duration until expiration.
-// If duration is -1, the item never expires and will never be removed, even if it is above the cache capacity.
-func (c *MemoryCache) Set(key string, content string, duration int) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// If the cache is full, remove the oldest item.
-	if c.currentItems >= c.maxItems {
-		var oldestKey string
-		var oldestExpiration time.Time
-		for k, v := range c.items {
-			if oldestKey == "" || timeBeforeWithIndefinite(v.Expiration, oldestExpiration) {
-				if isIndefinite(v.Expiration) {
-					continue
-				}
-				oldestKey = k
-				oldestExpiration = v.Expiration
-			}
-		}
-		delete(c.items, oldestKey)
-		c.currentItems--
-	}
-
-	expiration := time.Now().Add(time.Duration(duration) * time.Second)
-	if duration == -1 {
-		expiration = time.Unix(1<<63-1, 0) // Maximum possible time
-	}
-
-	c.items[key] = &CacheItem{Content: []byte(content), Expiration: expiration}
-	c.currentItems++
-
-	return nil
+// CurrentCacheMetadata represents the current cache metadata. It points to the various cache keys to more easily retrieve the schema, for example. These will only point to the latest cache key with actual data- that is, those that aren't Unchanged.
+type CurrentCacheMetadata struct {
+	LastModified      time.Time `json:"lastModified"`      // Last modified time of the cache.
+	SupergraphKey     string    `json:"supergraphKey"`     // Supergraph key of the cache.
+	PersistedQueryKey string    `json:"persistedQueryKey"` // Persisted query key of the cache.
+	EntitlementKey    string    `json:"entitlementKey"`    // Entitlement key of the cache.
 }
 
 // makeCacheKey generates a cache key from the provided graphID, variantID, and operationName.
-func MakeCacheKey(graphID, variantID, operationName string, extraArgs ...interface{}) string {
+func MakeCacheKey(graphRef, operationName string, extraArgs ...interface{}) string {
+	prefix := MakeCachePrefix(graphRef, operationName)
 	// Append any extra arguments to the cache key.
 	if len(extraArgs) > 0 {
-		hash := sha256.Sum256([]byte(fmt.Sprint(extraArgs...)))
-		return fmt.Sprintf("%s:%s:%s:%x", graphID, variantID, operationName, hash)
+		return fmt.Sprintf("%s:%s", prefix, util.HashString(fmt.Sprint(extraArgs...)))
 	}
 
+	return prefix
+}
+
+func MakeCachePrefix(graphRef string, operationName string) string {
+	graphID, variantID, err := util.ParseGraphRef(graphRef)
+	if err != nil {
+		return ""
+	}
 	return fmt.Sprintf("%s:%s:%s", graphID, variantID, operationName)
+}
+
+// UpdateNewest updates the base cache entry with the passed item if it is newer.
+// This means that new routers won't have outdated artifacts, since the entry will always be the one without arguments; in environments with duration == -1, this leads to an outdated entry
+// from uplink-relay's POV, so this ensures that the entry is always the latest
+func UpdateNewest(systemCache Cache, logger *slog.Logger, graphRef string, operationName string, passedItem CacheItem) error {
+	if passedItem.Content == nil || len(passedItem.Content) == 0 {
+		return nil
+	}
+
+	cacheKey := DefaultCacheKey(graphRef, operationName)
+	var firstEntry CacheItem
+
+	// Get the first entry
+	entry, ok := systemCache.Get(cacheKey)
+	if ok {
+		// Unmarshal the first entry
+		if err := json.Unmarshal([]byte(entry), &firstEntry); err != nil {
+			logger.Error("Error unmarshalling cache entry", "cacheKey", cacheKey)
+			return err
+		}
+	} else {
+		firstEntry = CacheItem{
+			Content:      nil,
+			Expiration:   IndefiniteTimestamp,
+			Hash:         "",
+			LastModified: IndefiniteTimestamp,
+			ID:           "",
+		}
+	}
+
+	// If the passed item is newer than the first entry, update the first entry (aka the one without arguments)
+	if firstEntry.LastModified.Before(passedItem.LastModified) && firstEntry.Hash != passedItem.Hash {
+		cacheBytes, err := json.Marshal(passedItem)
+		if err != nil {
+			return err
+		}
+		// default args to set the first entry
+		return systemCache.Set(cacheKey, string(cacheBytes[:]), -1)
+	}
+	return nil
 }
 
 func timeBeforeWithIndefinite(expirationTime time.Time, compareTo time.Time) bool {
@@ -98,5 +105,16 @@ func timeBeforeWithIndefinite(expirationTime time.Time, compareTo time.Time) boo
 }
 
 func isIndefinite(expirationTime time.Time) bool {
-	return expirationTime == time.Unix(1<<63-1, 0)
+	return expirationTime == IndefiniteTimestamp
+}
+
+func DefaultCacheKey(graphRef string, operationName string) string {
+	return MakeCacheKey(graphRef, operationName, map[string]interface{}{"graph_ref": graphRef, "ifAfterId": ""})
+}
+
+func ExpirationTime(duration int) time.Time {
+	if duration == -1 {
+		return IndefiniteTimestamp
+	}
+	return time.Now().Add(time.Duration(duration) * time.Second)
 }
