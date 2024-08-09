@@ -45,7 +45,8 @@ type PersistedQueryManifest struct {
 }
 
 type PinPersistedQueryManifestInput struct {
-	ID string `json:"id"`
+	ID       string `json:"id"`
+	GraphRef string `json:"graphRef"`
 }
 
 type PinPersistedQueryManifestResult struct {
@@ -79,14 +80,15 @@ type Supergraph struct {
 	// The ID of the uplink relay.
 	GraphRef string `json:"graphRef"`
 	// The schema ID pinned to the uplink relay.
-	// This will be null if the service has not received a request for the schema.
+	// This will be null if the service has not proxied a request with a schema return. Pinned schemas should always have data, as should any schema that's been forced to be fetched (since it'll be in the cache).
 	CurrentSchema *Schema `json:"currentSchema,omitempty"`
 	// The persisted query manifest ID pinned to the uplink relay.
-	// This will be null if the service is not using persisted queries
-	PersistedQueryManifestID *PersistedQueryManifest `json:"persistedQueryManifestId,omitempty"`
+	// This will be null if the service is not using persisted queries, or if the service has not proxied a request with a persisted query manifest return.
+	// Pinned persisted query manifests should always have data, as should any persisted query manifest that's been forced to be fetched (since it'll be in the cache).
+	PersistedQueryManifestID *PersistedQueryManifest `json:"persistedQueryManifestID,omitempty"`
 	// The schema ID pinned to the uplink relay.
 	// This will be null if the service has not pinned the schema launch ID.
-	PinnedSchemaID *string `json:"pinnedSchemaID,omitempty"`
+	PinnedLaunchID *string `json:"pinnedLaunchID,omitempty"`
 	// The persisted query manifest ID pinned to the uplink relay.
 	// This will be null if the service has not pinned the persisted query manifest ID.
 	PinnedPersistedQueryManifestID *string `json:"pinnedPersistedQueryManifestID,omitempty"`

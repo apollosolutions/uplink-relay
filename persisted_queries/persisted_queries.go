@@ -3,8 +3,11 @@ package persistedqueries
 import (
 	"apollosolutions/uplink-relay/cache"
 	"apollosolutions/uplink-relay/config"
+	"apollosolutions/uplink-relay/internal/util"
+	"apollosolutions/uplink-relay/uplink"
 	"bytes"
 	"compress/zlib"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,6 +15,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type UplinkPersistedQueryResponse struct {
@@ -141,6 +145,108 @@ func CachePersistedQueryChunkData(config *config.Config, logger *slog.Logger, sy
 	return chunks, nil
 }
 
+// FetchPQManifest fetches the persisted query (PQ) manifest for the specified graph.
+func FetchPQManifest(userConfig *config.Config, systemCache cache.Cache, logger *slog.Logger, graphRef string, ifAfterId string) error {
+	supergraphConfig, err := config.FindSupergraphConfigFromGraphRef(graphRef, userConfig)
+	if err != nil {
+		return err
+	}
+
+	if supergraphConfig.PersistedQueryVersion != "" {
+		return nil
+	}
+
+	// Define the request body
+	variables := map[string]interface{}{
+		"apiKey":    supergraphConfig.ApolloKey,
+		"graph_ref": graphRef,
+		"ifAfterId": ifAfterId,
+	}
+	query := `query PersistedQueriesManifestQuery($apiKey: String!, $graph_ref: String!, $ifAfterId: ID) {
+			persistedQueries(ref: $graph_ref, apiKey: $apiKey, ifAfterId: $ifAfterId) {
+				__typename
+				... on PersistedQueriesResult {
+				id
+				minDelaySeconds
+				chunks {
+					id
+					urls
+				}
+				}
+				... on Unchanged {
+					id
+					minDelaySeconds
+				}
+				... on FetchError {
+					code
+					message
+				}
+			}
+		}`
+	operationName := "PersistedQueriesManifestQuery"
+
+	resp, err := util.UplinkRequest(userConfig, logger, query, variables, operationName)
+	if err != nil {
+		return err
+	}
+
+	// Unmarshal the response body into the LicenseQueryResponse struct
+	var response UplinkPersistedQueryResponse
+	err = json.Unmarshal(resp, &response)
+	if err != nil {
+		return err
+	}
+
+	if userConfig.Cache.Enabled {
+		chunks, err := CachePersistedQueryChunkData(userConfig, logger, systemCache, response.Data.PersistedQueries.Chunks)
+		if err != nil {
+			return err
+		}
+		response.Data.PersistedQueries.Chunks = chunks
+
+		resp, err := json.Marshal(response)
+		if err != nil {
+			return err
+		}
+
+		cacheItem := cache.CacheItem{
+			Content:      resp,
+			Expiration:   cache.ExpirationTime(userConfig.Cache.Duration),
+			Hash:         util.HashString(string(resp)),
+			LastModified: time.Now(),
+			ID:           response.Data.PersistedQueries.ID,
+		}
+
+		cacheBytes, err := json.Marshal(cacheItem)
+		if err != nil {
+			return err
+		}
+		// Cache the response
+		return cachePersistedQueries(systemCache, logger, graphRef, cacheBytes, userConfig.Cache.Duration)
+	}
+	return nil
+}
+
+func DecodeID(id string) (string, int) {
+	parts := strings.Split(id, ":")
+	if len(parts) != 2 {
+		return "", -1
+	}
+
+	version, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return "", -1
+	}
+	return parts[0], version
+}
+
 func makePersistedQueryCacheKey(id string, index string) string {
 	return fmt.Sprintf("pq:%s:%s", id, index)
+}
+
+func cachePersistedQueries(systemCache cache.Cache, logger *slog.Logger, graphRef string, response []byte, duration int) error {
+	logger.Debug("Caching pq manifest", "graphRef", graphRef)
+	// Store the schema in the cache
+	cacheKey := cache.DefaultCacheKey(graphRef, uplink.PersistedQueriesQuery)
+	return systemCache.Set(cacheKey, string(response[:]), duration)
 }

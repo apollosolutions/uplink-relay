@@ -168,7 +168,12 @@ func startup(userConfig *config.Config, logger *slog.Logger, systemCache cache.C
 		proxy.RegisterHandlers(userConfig.ManagementAPI.Path, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Headers", "*")
-			ctx := context.WithValue(context.Background(), config.ConfigKey, userConfig)
+			resolverContext := &graph.ResolverContext{
+				Logger:      logger,
+				SystemCache: systemCache,
+				UserConfig:  userConfig,
+			}
+			ctx := context.WithValue(context.Background(), graph.ResolverKey, resolverContext)
 			graphqlHandler.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

@@ -5,6 +5,10 @@ import (
 	"os"
 )
 
+type keyType string
+
+const LoggerKey keyType = "logger"
+
 // makeLogger creates a new logger instance.
 func MakeLogger(enableDebug *bool) *slog.Logger {
 	lvl := new(slog.LevelVar)

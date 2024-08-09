@@ -24,6 +24,7 @@ type LaunchQueryGraph struct {
 }
 
 type LaunchQueryVariantLaunch struct {
+	ID     string `json:"id"`
 	Launch struct {
 		CompletedAt string `json:"completedAt"`
 		Build       struct {
@@ -41,11 +42,6 @@ type LaunchQueryVariantLaunch struct {
 			}
 		} `json:"build"`
 	} `json:"launch"`
-}
-
-type SupergraphLaunchIDCacheEntry struct {
-	LastModified string `json:"lastModified"`
-	CoreSchema   string `json:"coreSchema"`
 }
 
 func PinLaunchID(userConfig *config.Config, logger *slog.Logger, systemCache cache.Cache, launchID string, graphRef string) error {
@@ -72,24 +68,25 @@ func PinLaunchID(userConfig *config.Config, logger *slog.Logger, systemCache cac
 		query UplinkRelay_GetLaunchIDSchema($graphId: ID!, $name: String!, $launchId: ID!) {
 			graph(id: $graphId) {
 				variant(name: $name) {
-				launch(id: $launchId) {
-					completedAt
-					build {
-					result {
-						__typename
-						... on BuildSuccess {
-						coreSchema {
-							coreDocument
-						}
-						}
-						... on BuildFailure {
-						errorMessages {
-							message
+					id
+					launch(id: $launchId) {
+						completedAt
+						build {
+						result {
+							__typename
+							... on BuildSuccess {
+							coreSchema {
+								coreDocument
+							}
+							}
+							... on BuildFailure {
+							errorMessages {
+								message
+							}
+							}
 						}
 						}
 					}
-					}
-				}
 				}
 			}
 		}
@@ -147,9 +144,17 @@ func PinLaunchID(userConfig *config.Config, logger *slog.Logger, systemCache cac
 
 	// Store the core schema in the cache
 	if userConfig.Cache.Enabled {
-		cacheKey := cache.MakeCacheKey(graphID, variantID, SupergraphPinned)
-		insertPinnedCacheEntry(logger, systemCache, cacheKey, apiResponse.Data.Graph.Variant.Launch.Build.Result.CoreSchema.CoreDocument, modifiedAt)
+		cacheKey := cache.MakeCacheKey(graphRef, SupergraphPinned)
+		insertPinnedCacheEntry(logger, systemCache, cacheKey, apiResponse.Data.Graph.Variant.Launch.Build.Result.CoreSchema.CoreDocument, apiResponse.Data.Graph.Variant.ID, modifiedAt)
 	}
-
+	// now finally update the config to the new pinned version to handle the case where the management API updated the launchID
+	configs := []config.SupergraphConfig{}
+	for _, s := range userConfig.Supergraphs {
+		if s.GraphRef == graphRef {
+			s.LaunchID = launchID
+		}
+		configs = append(configs, s)
+	}
+	userConfig.Supergraphs = configs
 	return nil
 }

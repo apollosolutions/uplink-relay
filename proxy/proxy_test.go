@@ -82,7 +82,7 @@ func TestRelayHandler(t *testing.T) {
 	if rr.Body.String() != licenseResponse {
 		t.Errorf("Expected response body '%s', but got '%s'", licenseResponse, rr.Body.String())
 	}
-	var key = cache.MakeCacheKey("graph", "local", "LicenseQuery", map[string]interface{}{"graph_ref": "graph@local", "ifAfterId": ""})
+	var key = cache.MakeCacheKey("graph@local", "LicenseQuery", map[string]interface{}{"graph_ref": "graph@local", "ifAfterId": ""})
 
 	// Assert that the response body is cached
 	if _, ok := mockCache.Get(key); !ok {
@@ -152,7 +152,7 @@ func TestHandleCacheHit(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	// Call the handleCacheHit function
-	err := handleCacheHit(cache.MakeCacheKey("graph", "local", uplink.LicenseQuery), []byte(licenseResponse), mockLogger, time.Duration(mockConfig.Cache.Duration)*time.Second, "")(rr, req)
+	err := handleCacheHit(cache.MakeCacheKey("graph@local", uplink.LicenseQuery), &cache.CacheItem{Content: []byte(licenseResponse)}, mockLogger, time.Duration(mockConfig.Cache.Duration)*time.Second, "")(rr, req)
 	if err != nil {
 		t.Errorf("Expected no error, but got %v", err)
 	}
@@ -167,7 +167,10 @@ func TestHandleCacheHit(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/", nil)
 
 	// Call the handleCacheHit again for the SupergraphQuery
-	err = handleCacheHit(cache.MakeCacheKey("graph", "local", uplink.SupergraphQuery), []byte("1234"), mockLogger, time.Duration(mockConfig.Cache.Duration)*time.Second, "")(rr, req)
+	cacheItem := &cache.CacheItem{
+		Content: []byte("1234"),
+	}
+	err = handleCacheHit(cache.MakeCacheKey("graph@local", uplink.SupergraphQuery), cacheItem, mockLogger, time.Duration(mockConfig.Cache.Duration)*time.Second, "")(rr, req)
 	if err != nil {
 		t.Errorf("Expected no error, but got %v", err)
 	}
@@ -182,7 +185,9 @@ func TestHandleCacheHit(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/", nil)
 
 	// Call the handleCacheHit again for the PersistedQueriesManifestQuery
-	err = handleCacheHit(cache.MakeCacheKey("graph", "local", uplink.PersistedQueriesQuery), []byte(persistedQueriesResponse), mockLogger, time.Duration(mockConfig.Cache.Duration)*time.Second, "")(rr, req)
+	err = handleCacheHit(cache.MakeCacheKey("graph@local", uplink.PersistedQueriesQuery), &cache.CacheItem{
+		Content: []byte(persistedQueriesResponse),
+	}, mockLogger, time.Duration(mockConfig.Cache.Duration)*time.Second, "")(rr, req)
 	if err != nil {
 		t.Errorf("Expected no error, but got %v", err)
 	}
