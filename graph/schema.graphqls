@@ -30,10 +30,10 @@ type Mutation {
   ): PinPersistedQueryManifestResult!
 
   """
-  Force updates the uplink relay, similar to the polling funcionality.
-  This will cause the uplink relay to fetch the latest schema, entitlement, and persisted query manifest.
+  Force updates the uplink relay, similar to the polling functionality.
+  This will cause the uplink relay to fetch the latest schema, entitlement, and/or persisted query manifest.
   """
-  forceUpdate(input: ForceUpdateInput): ForceUpdateResult!
+  forceUpdate(input: ForceUpdateInput!): ForceUpdateResult!
 }
 
 enum HealthStatus {
@@ -48,21 +48,22 @@ type Supergraph {
   graphRef: ID!
   """
   The schema ID pinned to the uplink relay.
-  This will be null if the service has not received a request for the schema.
+  This will be null if the service has not proxied a request with a schema return. Pinned schemas should always have data, as should any schema that's been forced to be fetched (since it'll be in the cache).
   """
   currentSchema: Schema
 
   """
   The persisted query manifest ID pinned to the uplink relay.
-  This will be null if the service is not using persisted queries
+  This will be null if the service is not using persisted queries, or if the service has not proxied a request with a persisted query manifest return. 
+  Pinned persisted query manifests should always have data, as should any persisted query manifest that's been forced to be fetched (since it'll be in the cache).
   """
-  persistedQueryManifestId: PersistedQueryManifest
+  persistedQueryManifestID: PersistedQueryManifest
 
   """
   The schema ID pinned to the uplink relay.
   This will be null if the service has not pinned the schema launch ID.
   """
-  pinnedSchemaID: String
+  pinnedLaunchID: String
 
   """
   The persisted query manifest ID pinned to the uplink relay.
@@ -128,6 +129,7 @@ type PinSchemaResult {
 
 input PinPersistedQueryManifestInput {
   id: String!
+  graphRef: ID!
 }
 
 type PinPersistedQueryManifestResult {

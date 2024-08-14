@@ -59,14 +59,14 @@ func TestMemoryCacheSet(t *testing.T) {
 
 func TestMakeCacheKey(t *testing.T) {
 	// Test case 1: Generate cache key with only required arguments
-	key := MakeCacheKey("graphID1", "variantID1", "operationName1")
+	key := MakeCacheKey("graphID1@variantID1", "operationName1")
 	expectedKey := "graphID1:variantID1:operationName1"
 	if key != expectedKey {
 		t.Errorf("Expected key to be '%s', got '%s'", expectedKey, key)
 	}
 
 	// Test case 2: Generate cache key with extra arguments
-	key = MakeCacheKey("graphID2", "variantID2", "operationName2", 123, true)
+	key = MakeCacheKey("graphID2@variantID2", "operationName2", 123, true)
 	expectedKey = "graphID2:variantID2:operationName2:6a203127b0128340878b0beadbb7cabae0ad8ae6ff0f48a054cda7cdaa87f9d5"
 	if key != expectedKey {
 		t.Errorf("Expected key to be '%s', got '%s'", expectedKey, key)
