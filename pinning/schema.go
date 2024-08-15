@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-const DefaultStudioAPIURL = "https://graphql.api.apollographql.com/api/graphql"
-
 type LaunchQuery struct {
 	Graph *LaunchQueryGraph `json:"graph"`
 }
@@ -103,7 +101,7 @@ func PinLaunchID(userConfig *config.Config, logger *slog.Logger, systemCache cac
 		return err
 	}
 
-	req, err := http.NewRequest("POST", DefaultStudioAPIURL, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequest("POST", userConfig.Uplink.StudioAPIURL, bytes.NewBuffer(requestBody))
 	if err != nil {
 		logger.Error("Error creating request", "err", err)
 		return err

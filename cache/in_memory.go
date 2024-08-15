@@ -73,7 +73,7 @@ func (c *MemoryCache) DeleteWithPrefix(prefix string) error {
 	defer c.mu.Unlock()
 
 	for k := range c.items {
-		if k[:len(prefix)] == prefix {
+		if len(prefix) < len(k) && k[:len(prefix)] == prefix {
 			delete(c.items, k)
 			c.currentItems--
 		}

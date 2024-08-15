@@ -40,9 +40,10 @@ type RelayTlsConfig struct {
 
 // UplinkConfig details the configuration for connecting to upstream servers.
 type UplinkConfig struct {
-	URLs       []string `yaml:"urls"`       // List of URLs to use as uplink targets.
-	Timeout    int      `yaml:"timeout"`    // Timeout for uplink requests, in seconds.
-	RetryCount int      `yaml:"retryCount"` // Number of times to retry on uplink failure.
+	URLs         []string `yaml:"urls"`         // List of URLs to use as uplink targets.
+	Timeout      int      `yaml:"timeout"`      // Timeout for uplink requests, in seconds.
+	RetryCount   int      `yaml:"retryCount"`   // Number of times to retry on uplink failure.
+	StudioAPIURL string   `yaml:"studioAPIURL"` // URL for the Studio API.
 }
 
 // CacheConfig specifies the cache duration and max size.
@@ -105,9 +106,10 @@ func NewDefaultConfig() *Config {
 			TLS:     RelayTlsConfig{},
 		},
 		Uplink: UplinkConfig{
-			URLs:       []string{"http://localhost:8081"},
-			Timeout:    30,
-			RetryCount: -1,
+			URLs:         []string{"http://localhost:8081"},
+			Timeout:      30,
+			RetryCount:   -1,
+			StudioAPIURL: "https://graphql.api.apollographql.com/api/graphql",
 		},
 		Cache: CacheConfig{
 			Enabled:  true,
