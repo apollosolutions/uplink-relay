@@ -20,6 +20,8 @@ func TestPersistedQueryHandler(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"data":{"persistedQueries":{"id":"123","__typename":"","minDelaySeconds":0,"chunks":null}}}`))
 	}))
+	defer mockServer.Close()
+
 	// Prefill cache with test data
 	_, err := CachePersistedQueryChunkData(mockConfig, log, mockCache, []UplinkPersistedQueryChunk{{
 		ID:   "123",
@@ -203,5 +205,88 @@ func TestMakePersistedQueryCacheKey(t *testing.T) {
 	if result != expectedKey {
 		t.Errorf("Unexpected cache key: got %v, want %v", result, expectedKey)
 	}
+}
+func TestFetchPQManifest(t *testing.T) {
+	log := logger.MakeLogger(nil)
+	mockCache := cache.NewMemoryCache(1000)
+	mockConfig := config.NewDefaultConfig()
+	mockConfig.Relay.PublicURL = "http://example.com"
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"data":{"persistedQueries":{"__typename":"PersistedQueriesResult","id":"c42e4925-6678-497d-a1ed-e819dc039e34:1","minDelaySeconds":60,"chunks":[{"id":"graph/1/1","urls":["https://jsonplaceholder.typicode.com/todos/1"]}]}}}`))
+	}))
+	defer mockServer.Close()
 
+	mockConfig.Uplink.URLs = []string{mockServer.URL}
+	mockConfig.Supergraphs = []config.SupergraphConfig{{
+		GraphRef:  "graph@variant",
+		ApolloKey: "1234",
+	}}
+
+	// Test case 1: Fetch PQ manifest successfully
+	err := FetchPQManifest(mockConfig, mockCache, log, "graph@variant", "")
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	// Test case 2: Fetch PQ manifest with invalid graph reference
+	err = FetchPQManifest(mockConfig, mockCache, log, "", "")
+	if err == nil {
+		t.Error("Expected error, got nil")
+	}
+
+	// Test case 3: Fetch PQ manifest with non-existent manifest URL
+	mockConfig.Relay.PublicURL = "http://example.com/non-existent"
+	err = FetchPQManifest(mockConfig, mockCache, log, "graph1", "")
+	if err == nil {
+		t.Error("Expected error, got nil")
+	}
+}
+func TestDecodeID(t *testing.T) {
+	// Test case 1: Valid ID and index
+	id := "c42e4925-6678-497d-a1ed-e819dc039e34:1"
+	expectedID := "c42e4925-6678-497d-a1ed-e819dc039e34"
+	expectedIndex := 1
+	resultID, resultIndex := DecodeID(id)
+	if resultID != expectedID {
+		t.Errorf("Unexpected ID: got %v, want %v", resultID, expectedID)
+	}
+	if resultIndex != expectedIndex {
+		t.Errorf("Unexpected index: got %v, want %v", resultIndex, expectedIndex)
+	}
+
+	// Test case 2: Empty ID and index
+	id = ""
+	expectedID = ""
+	expectedIndex = -1
+	resultID, resultIndex = DecodeID(id)
+	if resultID != expectedID {
+		t.Errorf("Unexpected ID: got %v, want %v", resultID, expectedID)
+	}
+	if resultIndex != expectedIndex {
+		t.Errorf("Unexpected index: got %v, want %v", resultIndex, expectedIndex)
+	}
+
+	// Test case 3: ID without index
+	id = "c42e4925-6678-497d-a1ed-e819dc039e34"
+	expectedID = ""
+	expectedIndex = -1
+	resultID, resultIndex = DecodeID(id)
+	if resultID != expectedID {
+		t.Errorf("Unexpected ID: got %v, want %v", resultID, expectedID)
+	}
+	if resultIndex != expectedIndex {
+		t.Errorf("Unexpected index: got %v, want %v", resultIndex, expectedIndex)
+	}
+
+	// Test case 4: ID with invalid index
+	id = "c42e4925-6678-497d-a1ed-e819dc039e34:abc"
+	expectedID = ""
+	expectedIndex = -1
+	resultID, resultIndex = DecodeID(id)
+	if resultID != expectedID {
+		t.Errorf("Unexpected ID: got %v, want %v", resultID, expectedID)
+	}
+	if resultIndex != expectedIndex {
+		t.Errorf("Unexpected index: got %v, want %v", resultIndex, expectedIndex)
+	}
 }
