@@ -17,7 +17,7 @@ func TestMemoryCacheGet(t *testing.T) {
 	cache.Set("key1", defaultCacheContent, 10)
 	content, found := cache.Get("key1")
 	if !found {
-		t.Errorf("Expected item fto be found in cache")
+		t.Errorf("Expected item to be found in cache")
 	}
 	if string(content[:]) != defaultCacheContent {
 		t.Errorf("Expected content to be 'content1', got '%s'", string(content))
