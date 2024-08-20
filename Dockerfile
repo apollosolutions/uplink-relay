@@ -1,8 +1,5 @@
 # Start from the latest golang base image
-FROM golang:latest
-
-# Add Maintainer Info
-LABEL maintainer="Apollo GraphQL Solutions"
+FROM golang:1.22-bookworm as build
 
 # Set the Current Working Directory inside the container
 WORKDIR /app
@@ -17,10 +14,22 @@ RUN go mod download
 COPY . .
 
 # Build the Go app
-RUN go build .
+RUN go build -o /app/uplink-relay . 
+
+# Execution stage
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y ca-certificates
+
+USER 1001:1001
+
+COPY --from=build /app/uplink-relay /app/uplink-relay
+
+# Add Maintainer Info
+LABEL maintainer="Apollo GraphQL Solutions"
 
 # Expose port 8080 to the outside world
 EXPOSE 8080
 
 # Command to run the executable
-CMD ["./uplink-relay"]
+ENTRYPOINT ["/app/uplink-relay"]
