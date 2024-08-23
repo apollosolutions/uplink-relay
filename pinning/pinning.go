@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-type APIResponse struct {
+type LaunchAPIResponse struct {
 	Data LaunchQuery `json:"data"`
 }
 
@@ -94,11 +94,7 @@ func HandlePinnedEntry(logger *slog.Logger, systemCache cache.Cache, graphID, va
 
 	// skipping for now as the ID format is different
 	if operationName == uplink.PersistedQueriesQuery {
-		if entry.LastModified.After(time.Now()) {
-			return &entry, nil
-		}
-
-		return nil, nil
+		return &entry, nil
 	}
 
 	ifAfterIDTime, err := time.Parse("2006-01-02T15:04:05Z0700", ifAfterID)

@@ -183,7 +183,7 @@ func TestMakePersistedQueryCacheKey(t *testing.T) {
 	id := "123"
 	index := "0"
 	expectedKey := "pq:123:0"
-	result := makePersistedQueryCacheKey(id, index)
+	result := MakePersistedQueryCacheKey(id, index)
 	if result != expectedKey {
 		t.Errorf("Unexpected cache key: got %v, want %v", result, expectedKey)
 	}
@@ -192,7 +192,7 @@ func TestMakePersistedQueryCacheKey(t *testing.T) {
 	id = ""
 	index = ""
 	expectedKey = "pq::"
-	result = makePersistedQueryCacheKey(id, index)
+	result = MakePersistedQueryCacheKey(id, index)
 	if result != expectedKey {
 		t.Errorf("Unexpected cache key: got %v, want %v", result, expectedKey)
 	}
@@ -201,7 +201,7 @@ func TestMakePersistedQueryCacheKey(t *testing.T) {
 	id = "abc!@#$%^&*()"
 	index = "1"
 	expectedKey = "pq:abc!@#$%^&*():1"
-	result = makePersistedQueryCacheKey(id, index)
+	result = MakePersistedQueryCacheKey(id, index)
 	if result != expectedKey {
 		t.Errorf("Unexpected cache key: got %v, want %v", result, expectedKey)
 	}

@@ -57,7 +57,7 @@ type Supergraph {
   This will be null if the service is not using persisted queries, or if the service has not proxied a request with a persisted query manifest return. 
   Pinned persisted query manifests should always have data, as should any persisted query manifest that's been forced to be fetched (since it'll be in the cache).
   """
-  persistedQueryManifestID: PersistedQueryManifest
+  persistedQueryManifest: PersistedQueryManifest
 
   """
   The schema ID pinned to the uplink relay.
@@ -150,5 +150,5 @@ type ForceUpdateResult {
 type PersistedQueryManifest {
   id: ID!
   hash: String!
-  persistedQueryManifest: [String!]!
+  persistedQueryChunks: [String!]!
 }

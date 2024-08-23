@@ -90,8 +90,8 @@ func TestHandlePinnedEntry(t *testing.T) {
 		t.Errorf("HandlePinnedEntry returned an error: %v", err)
 	}
 
-	// Verify it returned an item
-	if cacheItem != nil {
+	// Verify it returned an item as persisted queries will always return the data
+	if cacheItem == nil {
 		t.Errorf("HandlePinnedEntry returned an empty cache item")
 	}
 }

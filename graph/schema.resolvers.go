@@ -89,8 +89,33 @@ func (r *mutationResolver) PinSchema(ctx context.Context, input model.PinSchemaI
 
 // PinPersistedQueryManifest is the resolver for the pinPersistedQueryManifest field.
 func (r *mutationResolver) PinPersistedQueryManifest(ctx context.Context, input model.PinPersistedQueryManifestInput) (*model.PinPersistedQueryManifestResult, error) {
-	// TODO: need to work on pinning logic for persisted query manifest, so this resolver is not implemented yet
-	panic(fmt.Errorf("not implemented: PinPersistedQueryManifest - pinPersistedQueryManifest"))
+	resolverContext := resolverContext(ctx)
+	if resolverContext == nil {
+		return nil, fmt.Errorf("error retrieving resolver context")
+	}
+
+	supergraphConfig, err := config.FindSupergraphConfigFromGraphRef(input.GraphRef, resolverContext.UserConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	if supergraphConfig.PersistedQueryVersion == input.ID {
+		return &model.PinPersistedQueryManifestResult{
+			Success:       true,
+			Configuration: resolverContext.GetConfigDetails(),
+		}, nil
+	}
+
+	// Pin the persisted query manifest
+	err = pinning.PinPersistedQueries(resolverContext.UserConfig, resolverContext.Logger, resolverContext.SystemCache, input.GraphRef, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.PinPersistedQueryManifestResult{
+		Success:       true,
+		Configuration: resolverContext.GetConfigDetails(),
+	}, nil
 }
 
 // ForceUpdate is the resolver for the forceUpdate field.

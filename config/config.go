@@ -195,6 +195,10 @@ func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableD
 		loadedConfig.ManagementAPI.Path = defaultConfig.ManagementAPI.Path
 	}
 
+	if loadedConfig.Uplink.StudioAPIURL == "" {
+		loadedConfig.Uplink.StudioAPIURL = defaultConfig.Uplink.StudioAPIURL
+	}
+
 	// Log the final configuration
 	logger.Debug("Uplink Relay configuration: %+v", "config", loadedConfig)
 
