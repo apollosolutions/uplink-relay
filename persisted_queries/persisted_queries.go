@@ -64,8 +64,8 @@ func PersistedQueryHandler(logger *slog.Logger, client *http.Client, systemCache
 			return
 		}
 
-		logger.Debug("Received request", "id", id, "index", index)
-		content, ok := systemCache.Get(makePersistedQueryCacheKey(id, index))
+		logger.Debug("Received request", "id", id, "index", index, "cacheKey", MakePersistedQueryCacheKey(id, index))
+		content, ok := systemCache.Get(MakePersistedQueryCacheKey(id, index))
 		if !ok {
 			// Handle cache miss error
 			w.Header().Set("Content-Type", "application/json")
@@ -101,7 +101,7 @@ func CachePersistedQueryChunkData(config *config.Config, logger *slog.Logger, sy
 	for c, chunk := range chunks {
 		newUrls := []string{}
 		for u, chunkUrl := range chunk.URLs {
-			cacheKey := makePersistedQueryCacheKey(chunk.ID, strconv.Itoa(u))
+			cacheKey := MakePersistedQueryCacheKey(chunk.ID, strconv.Itoa(u))
 
 			// Fetch the content from the uplink.
 			res, err := http.Get(chunkUrl)
@@ -166,12 +166,12 @@ func FetchPQManifest(userConfig *config.Config, systemCache cache.Cache, logger 
 			persistedQueries(ref: $graph_ref, apiKey: $apiKey, ifAfterId: $ifAfterId) {
 				__typename
 				... on PersistedQueriesResult {
-				id
-				minDelaySeconds
-				chunks {
 					id
-					urls
-				}
+					minDelaySeconds
+					chunks {
+						id
+						urls
+					}
 				}
 				... on Unchanged {
 					id
@@ -240,7 +240,7 @@ func DecodeID(id string) (string, int) {
 	return parts[0], version
 }
 
-func makePersistedQueryCacheKey(id string, index string) string {
+func MakePersistedQueryCacheKey(id string, index string) string {
 	return fmt.Sprintf("pq:%s:%s", id, index)
 }
 

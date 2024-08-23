@@ -13,6 +13,9 @@ import (
 	"time"
 )
 
+type LaunchQueryResponse struct {
+	Data LaunchQuery `json:"data"`
+}
 type LaunchQuery struct {
 	Graph *LaunchQueryGraph `json:"graph"`
 }
@@ -117,7 +120,7 @@ func PinLaunchID(userConfig *config.Config, logger *slog.Logger, systemCache cac
 	// Read the response body
 	bodyBytes, _ := io.ReadAll(resp.Body)
 
-	var apiResponse APIResponse
+	var apiResponse LaunchQueryResponse
 	err = json.Unmarshal(bodyBytes, &apiResponse)
 	if err != nil {
 		logger.Error("Error unmarshalling response", "err", err)

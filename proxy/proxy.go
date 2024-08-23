@@ -421,9 +421,12 @@ func handleCacheHit(cacheKey string, cacheItem *cache.CacheItem, logger *slog.Lo
 
 			cachedID, cachedVersion := persistedqueries.DecodeID(cachedResponse.Data.PersistedQueries.ID)
 			afterID, afterVersion := persistedqueries.DecodeID(ifAfterId)
-
-			// If the cached ID is the same as the after ID and the after version is less than or equal to the cached version, return Unchanged
-			if cachedID == afterID && afterVersion == cachedVersion {
+			logger.Info("Cache hit", "cachedID", cachedID, "cachedVersion", cachedVersion, "afterID", afterID, "afterVersion", afterVersion)
+			// If the cached ID is the same as the after ID and the after version is greater than or equal to the cached version, return Unchanged
+			// e.g. given abc:1 as the cached version, and an ifAfterId of abc:1, return Unchanged
+			// e.g. given abc:1 as the cached version, and an ifAfterId of abc:2, return Unchanged (since the after version is greater)
+			// e.g. given abc:1 as the cached version, and an ifAfterId of abc:0, return the persisted query (since the after version is earlier)
+			if cachedID == afterID && afterVersion >= cachedVersion {
 				typename = "Unchanged"
 				cachedResponse.Data.PersistedQueries.Chunks = nil
 				cachedResponse.Data.PersistedQueries.Typename = typename

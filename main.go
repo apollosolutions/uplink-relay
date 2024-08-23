@@ -160,6 +160,13 @@ func startup(userConfig *config.Config, logger *slog.Logger, systemCache cache.C
 				logger.Error("Failed to pin offline license", "graphRef", supergraph.GraphRef)
 			}
 		}
+		if supergraph.PersistedQueryVersion != "" {
+			logger.Debug("Pinning persisted queries", "graphRef", supergraph.GraphRef, "version", supergraph.PersistedQueryVersion)
+			err := pinning.PinPersistedQueries(userConfig, logger, systemCache, supergraph.GraphRef, supergraph.PersistedQueryVersion)
+			if err != nil {
+				logger.Error("Failed to pin persisted queries", "graphRef", supergraph.GraphRef, "version", supergraph.PersistedQueryVersion)
+			}
+		}
 	}
 	if userConfig.ManagementAPI.Enabled {
 		logger.Info("Management API enabled", "path", userConfig.ManagementAPI.Path)

@@ -39,9 +39,9 @@ type Mutation struct {
 }
 
 type PersistedQueryManifest struct {
-	ID                     string   `json:"id"`
-	Hash                   string   `json:"hash"`
-	PersistedQueryManifest []string `json:"persistedQueryManifest"`
+	ID                   string   `json:"id"`
+	Hash                 string   `json:"hash"`
+	PersistedQueryChunks []string `json:"persistedQueryChunks"`
 }
 
 type PinPersistedQueryManifestInput struct {
@@ -85,7 +85,7 @@ type Supergraph struct {
 	// The persisted query manifest ID pinned to the uplink relay.
 	// This will be null if the service is not using persisted queries, or if the service has not proxied a request with a persisted query manifest return.
 	// Pinned persisted query manifests should always have data, as should any persisted query manifest that's been forced to be fetched (since it'll be in the cache).
-	PersistedQueryManifestID *PersistedQueryManifest `json:"persistedQueryManifestID,omitempty"`
+	PersistedQueryManifest *PersistedQueryManifest `json:"persistedQueryManifest,omitempty"`
 	// The schema ID pinned to the uplink relay.
 	// This will be null if the service has not pinned the schema launch ID.
 	PinnedLaunchID *string `json:"pinnedLaunchID,omitempty"`

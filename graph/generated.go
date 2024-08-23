@@ -70,9 +70,9 @@ type ComplexityRoot struct {
 	}
 
 	PersistedQueryManifest struct {
-		Hash                   func(childComplexity int) int
-		ID                     func(childComplexity int) int
-		PersistedQueryManifest func(childComplexity int) int
+		Hash                 func(childComplexity int) int
+		ID                   func(childComplexity int) int
+		PersistedQueryChunks func(childComplexity int) int
 	}
 
 	PinPersistedQueryManifestResult struct {
@@ -99,7 +99,7 @@ type ComplexityRoot struct {
 	Supergraph struct {
 		CurrentSchema                  func(childComplexity int) int
 		GraphRef                       func(childComplexity int) int
-		PersistedQueryManifestID       func(childComplexity int) int
+		PersistedQueryManifest         func(childComplexity int) int
 		PinnedLaunchID                 func(childComplexity int) int
 		PinnedPersistedQueryManifestID func(childComplexity int) int
 	}
@@ -239,12 +239,12 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.PersistedQueryManifest.ID(childComplexity), true
 
-	case "PersistedQueryManifest.persistedQueryManifest":
-		if e.complexity.PersistedQueryManifest.PersistedQueryManifest == nil {
+	case "PersistedQueryManifest.persistedQueryChunks":
+		if e.complexity.PersistedQueryManifest.PersistedQueryChunks == nil {
 			break
 		}
 
-		return e.complexity.PersistedQueryManifest.PersistedQueryManifest(childComplexity), true
+		return e.complexity.PersistedQueryManifest.PersistedQueryChunks(childComplexity), true
 
 	case "PinPersistedQueryManifestResult.configuration":
 		if e.complexity.PinPersistedQueryManifestResult.Configuration == nil {
@@ -323,12 +323,12 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Supergraph.GraphRef(childComplexity), true
 
-	case "Supergraph.persistedQueryManifestID":
-		if e.complexity.Supergraph.PersistedQueryManifestID == nil {
+	case "Supergraph.persistedQueryManifest":
+		if e.complexity.Supergraph.PersistedQueryManifest == nil {
 			break
 		}
 
-		return e.complexity.Supergraph.PersistedQueryManifestID(childComplexity), true
+		return e.complexity.Supergraph.PersistedQueryManifest(childComplexity), true
 
 	case "Supergraph.pinnedLaunchID":
 		if e.complexity.Supergraph.PinnedLaunchID == nil {
@@ -628,8 +628,8 @@ func (ec *executionContext) fieldContext_Configuration_supergraphs(_ context.Con
 				return ec.fieldContext_Supergraph_graphRef(ctx, field)
 			case "currentSchema":
 				return ec.fieldContext_Supergraph_currentSchema(ctx, field)
-			case "persistedQueryManifestID":
-				return ec.fieldContext_Supergraph_persistedQueryManifestID(ctx, field)
+			case "persistedQueryManifest":
+				return ec.fieldContext_Supergraph_persistedQueryManifest(ctx, field)
 			case "pinnedLaunchID":
 				return ec.fieldContext_Supergraph_pinnedLaunchID(ctx, field)
 			case "pinnedPersistedQueryManifestID":
@@ -1205,8 +1205,8 @@ func (ec *executionContext) fieldContext_PersistedQueryManifest_hash(_ context.C
 	return fc, nil
 }
 
-func (ec *executionContext) _PersistedQueryManifest_persistedQueryManifest(ctx context.Context, field graphql.CollectedField, obj *model.PersistedQueryManifest) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_PersistedQueryManifest_persistedQueryManifest(ctx, field)
+func (ec *executionContext) _PersistedQueryManifest_persistedQueryChunks(ctx context.Context, field graphql.CollectedField, obj *model.PersistedQueryManifest) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_PersistedQueryManifest_persistedQueryChunks(ctx, field)
 	if err != nil {
 		return graphql.Null
 	}
@@ -1219,7 +1219,7 @@ func (ec *executionContext) _PersistedQueryManifest_persistedQueryManifest(ctx c
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.PersistedQueryManifest, nil
+		return obj.PersistedQueryChunks, nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1236,7 +1236,7 @@ func (ec *executionContext) _PersistedQueryManifest_persistedQueryManifest(ctx c
 	return ec.marshalNString2ᚕstringᚄ(ctx, field.Selections, res)
 }
 
-func (ec *executionContext) fieldContext_PersistedQueryManifest_persistedQueryManifest(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_PersistedQueryManifest_persistedQueryChunks(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "PersistedQueryManifest",
 		Field:      field,
@@ -1885,8 +1885,8 @@ func (ec *executionContext) fieldContext_Supergraph_currentSchema(_ context.Cont
 	return fc, nil
 }
 
-func (ec *executionContext) _Supergraph_persistedQueryManifestID(ctx context.Context, field graphql.CollectedField, obj *model.Supergraph) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_Supergraph_persistedQueryManifestID(ctx, field)
+func (ec *executionContext) _Supergraph_persistedQueryManifest(ctx context.Context, field graphql.CollectedField, obj *model.Supergraph) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Supergraph_persistedQueryManifest(ctx, field)
 	if err != nil {
 		return graphql.Null
 	}
@@ -1899,7 +1899,7 @@ func (ec *executionContext) _Supergraph_persistedQueryManifestID(ctx context.Con
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.PersistedQueryManifestID, nil
+		return obj.PersistedQueryManifest, nil
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1913,7 +1913,7 @@ func (ec *executionContext) _Supergraph_persistedQueryManifestID(ctx context.Con
 	return ec.marshalOPersistedQueryManifest2ᚖapollosolutionsᚋuplinkᚑrelayᚋgraphᚋmodelᚐPersistedQueryManifest(ctx, field.Selections, res)
 }
 
-func (ec *executionContext) fieldContext_Supergraph_persistedQueryManifestID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Supergraph_persistedQueryManifest(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Supergraph",
 		Field:      field,
@@ -1925,8 +1925,8 @@ func (ec *executionContext) fieldContext_Supergraph_persistedQueryManifestID(_ c
 				return ec.fieldContext_PersistedQueryManifest_id(ctx, field)
 			case "hash":
 				return ec.fieldContext_PersistedQueryManifest_hash(ctx, field)
-			case "persistedQueryManifest":
-				return ec.fieldContext_PersistedQueryManifest_persistedQueryManifest(ctx, field)
+			case "persistedQueryChunks":
+				return ec.fieldContext_PersistedQueryManifest_persistedQueryChunks(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type PersistedQueryManifest", field.Name)
 		},
@@ -4156,8 +4156,8 @@ func (ec *executionContext) _PersistedQueryManifest(ctx context.Context, sel ast
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "persistedQueryManifest":
-			out.Values[i] = ec._PersistedQueryManifest_persistedQueryManifest(ctx, field, obj)
+		case "persistedQueryChunks":
+			out.Values[i] = ec._PersistedQueryManifest_persistedQueryChunks(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -4433,8 +4433,8 @@ func (ec *executionContext) _Supergraph(ctx context.Context, sel ast.SelectionSe
 			}
 		case "currentSchema":
 			out.Values[i] = ec._Supergraph_currentSchema(ctx, field, obj)
-		case "persistedQueryManifestID":
-			out.Values[i] = ec._Supergraph_persistedQueryManifestID(ctx, field, obj)
+		case "persistedQueryManifest":
+			out.Values[i] = ec._Supergraph_persistedQueryManifest(ctx, field, obj)
 		case "pinnedLaunchID":
 			out.Values[i] = ec._Supergraph_pinnedLaunchID(ctx, field, obj)
 		case "pinnedPersistedQueryManifestID":
