@@ -1,8 +1,10 @@
 # Start from the latest golang base image
-FROM golang:1.22-bookworm as build
+FROM golang:1.22 as build
 
 # Set the Current Working Directory inside the container
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y ca-certificates
 
 # Copy go mod and sum files
 COPY go.mod go.sum ./
@@ -14,16 +16,17 @@ RUN go mod download
 COPY . .
 
 # Build the Go app
-RUN go build -o /app/uplink-relay . 
+RUN CGO_ENABLED=0 go build -o /app/uplink-relay . 
 
 # Execution stage
-FROM debian:bookworm-slim
-
-RUN apt-get update && apt-get install -y ca-certificates
+FROM gcr.io/distroless/static-debian12
 
 USER 1001:1001
 
-COPY --from=build /app/uplink-relay /app/uplink-relay
+COPY --from=build /app/uplink-relay /uplink-relay
+
+# copy ca certs
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # Add Maintainer Info
 LABEL maintainer="Apollo GraphQL Solutions"
@@ -32,4 +35,4 @@ LABEL maintainer="Apollo GraphQL Solutions"
 EXPOSE 8080
 
 # Command to run the executable
-ENTRYPOINT ["/app/uplink-relay"]
+ENTRYPOINT ["/uplink-relay"]
