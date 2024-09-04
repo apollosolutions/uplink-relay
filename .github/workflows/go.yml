@@ -19,8 +19,15 @@ jobs:
       with:
         go-version: 'stable'
 
-    - name: Build
-      run: go build -v ./...
+    - name: Goreleaser build
+      uses: goreleaser/goreleaser-action@v6
+      with:
+        distribution: goreleaser
+        version: '~> v2'
+        # We set this to be a snapshot build since all will be dirty; we just want to validate that the build works
+        args: build --snapshot
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Test
       run: go test -v ./...
