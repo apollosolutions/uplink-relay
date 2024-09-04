@@ -39,3 +39,5 @@ config.yaml
 
 # IDE Files
 .idea
+
+dist/
