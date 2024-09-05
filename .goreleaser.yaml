@@ -17,11 +17,6 @@ builds:
       - amd64
       - arm64
 
-dockers:
-  - image_templates:
-    - 'ghcr.io/apollosolutions/uplink-relay:{{ .Tag }}'
-    - 'ghcr.io/apollosolutions/uplink-relay:latest'
-
 archives:
   - format: tar.gz
     # this name template makes the OS and Arch compatible with the results of `uname`.
