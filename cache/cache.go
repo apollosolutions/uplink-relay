@@ -13,6 +13,7 @@ type Cache interface {
 	Get(key string) ([]byte, bool)                      // Get retrieves an item from the cache if it exists and hasn't expired.
 	Set(key string, content string, duration int) error // Set adds an item to the cache with a specified duration until expiration.
 	DeleteWithPrefix(prefix string) error
+	Name() string
 }
 
 type keyType string

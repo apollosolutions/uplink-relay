@@ -18,6 +18,9 @@ cache:
 #   address: "localhost:6379"
 #   password: admin
 #   database: 0
+filesystem:
+  enabled: true
+  directory: ./tempcache/
 supergraphs:
   - graphRef: "${APOLLO_GRAPH_REF}"
     apolloKey: "${APOLLO_KEY}"

@@ -16,6 +16,7 @@ import (
 
 	"apollosolutions/uplink-relay/cache"
 	"apollosolutions/uplink-relay/config"
+	"apollosolutions/uplink-relay/filesystem_cache"
 	"apollosolutions/uplink-relay/graph"
 	"apollosolutions/uplink-relay/logger"
 	persistedqueries "apollosolutions/uplink-relay/persisted_queries"
@@ -23,6 +24,7 @@ import (
 	"apollosolutions/uplink-relay/polling"
 	"apollosolutions/uplink-relay/proxy"
 	apolloredis "apollosolutions/uplink-relay/redis"
+	"apollosolutions/uplink-relay/tiered_cache"
 	"apollosolutions/uplink-relay/uplink"
 	"apollosolutions/uplink-relay/webhooks"
 
@@ -65,7 +67,23 @@ func main() {
 	}
 
 	// Initialize caching based on the configuration.
+	var uplinkCaches = make([]cache.Cache, 0)
+
 	var uplinkCache cache.Cache
+	// Initialize the cache based on the configuration.
+	// We want to use the first cache that is enabled, which should be the in-memory cache
+	if mergedConfig.Cache.Enabled {
+		uplinkCaches = append(uplinkCaches, cache.NewMemoryCache(mergedConfig.Cache.MaxSize))
+	}
+	if mergedConfig.FilesystemCache.Enabled {
+		logger.Info("Using filesystem cache", "directory", mergedConfig.FilesystemCache.Directory)
+		filesystemCache, err := filesystem_cache.NewFilesystemCache(mergedConfig.FilesystemCache.Directory)
+		if err != nil {
+			logger.Error("Failed to create filesystem cache", "err", err)
+			os.Exit(1)
+		}
+		uplinkCaches = append(uplinkCaches, filesystemCache)
+	}
 	if mergedConfig.Redis.Enabled {
 		logger.Info("Using Redis cache", "address", mergedConfig.Redis.Address)
 		redisClient := redis.NewClient(&redis.Options{
@@ -74,11 +92,23 @@ func main() {
 			DB:       mergedConfig.Redis.Database,
 		})
 		redisClient.Ping()
-		uplinkCache = apolloredis.NewRedisCache(redisClient)
-	} else {
-		uplinkCache = cache.NewMemoryCache(mergedConfig.Cache.MaxSize)
+		uplinkCaches = append(uplinkCaches, apolloredis.NewRedisCache(redisClient))
 	}
 
+	if len(uplinkCaches) == 0 {
+		logger.Error("No cache configured")
+		os.Exit(1)
+	} else if len(uplinkCaches) == 1 {
+		logger.Debug("Using single cache")
+		uplinkCache = uplinkCaches[0]
+	} else {
+		logger.Debug("Using tiered cache")
+		uplinkCache, err = tiered_cache.NewTieredCache(uplinkCaches, logger, mergedConfig.Cache.Duration)
+		if err != nil {
+			logger.Error("Failed to create tiered cache", "err", err)
+			os.Exit(1)
+		}
+	}
 	// Create a channel to stop polling on SIGHUP to avoid duplicate polling.
 	stopPolling := make(chan bool, 1)
 

@@ -56,3 +56,7 @@ func (c *RedisCache) DeleteWithPrefix(prefix string) error {
 	}
 	return nil
 }
+
+func (c *RedisCache) Name() string {
+	return "Redis"
+}
