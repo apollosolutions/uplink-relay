@@ -41,3 +41,4 @@ config.yaml
 .idea
 
 dist/
+tempcache

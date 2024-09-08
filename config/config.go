@@ -15,14 +15,15 @@ import (
 // Config represents the application's configuration structure,
 // housing Relay, Uplink, and Cache configurations.
 type Config struct {
-	Relay         RelayConfig         `yaml:"relay"`         // RelayConfig for incoming connections.
-	Uplink        UplinkConfig        `yaml:"uplink"`        // UplinkConfig for managing uplink configuration.
-	Cache         CacheConfig         `yaml:"cache"`         // CacheConfig for cache settings.
-	Redis         RedisConfig         `yaml:"redis"`         // RedisConfig for using redis as cache.
-	Supergraphs   []SupergraphConfig  `yaml:"supergraphs"`   // SupergraphConfig for supergraph settings.
-	Webhook       WebhookConfig       `yaml:"webhook"`       // WebhookConfig for webhook handling.
-	Polling       PollingConfig       `yaml:"polling"`       // PollingConfig for polling settings.
-	ManagementAPI ManagementAPIConfig `yaml:"managementAPI"` // ManagementAPIConfig for management API settings.
+	Relay           RelayConfig           `yaml:"relay"`         // RelayConfig for incoming connections.
+	Uplink          UplinkConfig          `yaml:"uplink"`        // UplinkConfig for managing uplink configuration.
+	Cache           CacheConfig           `yaml:"cache"`         // CacheConfig for cache settings.
+	Redis           RedisConfig           `yaml:"redis"`         // RedisConfig for using redis as cache.
+	FilesystemCache FilesystemCacheConfig `yaml:"filesystem"`    // FilesystemCacheConfig for using filesystem as cache.
+	Supergraphs     []SupergraphConfig    `yaml:"supergraphs"`   // SupergraphConfig for supergraph settings.
+	Webhook         WebhookConfig         `yaml:"webhook"`       // WebhookConfig for webhook handling.
+	Polling         PollingConfig         `yaml:"polling"`       // PollingConfig for polling settings.
+	ManagementAPI   ManagementAPIConfig   `yaml:"managementAPI"` // ManagementAPIConfig for management API settings.
 }
 
 // RelayConfig defines the address the proxy server listens on.
@@ -59,6 +60,12 @@ type RedisConfig struct {
 	Address  string `yaml:"address"`  // Address of the Redis server.
 	Password string `yaml:"password"` // Password for Redis authentication.
 	Database int    `yaml:"database"` // Database to use in the Redis server.
+}
+
+// FilesystemCacheConfig defines the configuration for connecting to a Redis cache.
+type FilesystemCacheConfig struct {
+	Enabled   bool   `yaml:"enabled"`   // Whether Redis caching is enabled.
+	Directory string `yaml:"directory"` // Path to the filesystem cache.
 }
 
 // WebhookConfig defines the configuration for webhook handling.
