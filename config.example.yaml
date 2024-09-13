@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=.vscode/configuration_schema.json
 relay:
   address: "localhost:8080"
   # tls:
