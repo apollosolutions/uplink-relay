@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -8,6 +10,7 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/invopop/jsonschema"
 	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
 )
@@ -15,90 +18,90 @@ import (
 // Config represents the application's configuration structure,
 // housing Relay, Uplink, and Cache configurations.
 type Config struct {
-	Relay           RelayConfig           `yaml:"relay"`         // RelayConfig for incoming connections.
-	Uplink          UplinkConfig          `yaml:"uplink"`        // UplinkConfig for managing uplink configuration.
-	Cache           CacheConfig           `yaml:"cache"`         // CacheConfig for cache settings.
-	Redis           RedisConfig           `yaml:"redis"`         // RedisConfig for using redis as cache.
-	FilesystemCache FilesystemCacheConfig `yaml:"filesystem"`    // FilesystemCacheConfig for using filesystem as cache.
-	Supergraphs     []SupergraphConfig    `yaml:"supergraphs"`   // SupergraphConfig for supergraph settings.
-	Webhook         WebhookConfig         `yaml:"webhook"`       // WebhookConfig for webhook handling.
-	Polling         PollingConfig         `yaml:"polling"`       // PollingConfig for polling settings.
-	ManagementAPI   ManagementAPIConfig   `yaml:"managementAPI"` // ManagementAPIConfig for management API settings.
+	Relay           RelayConfig           `yaml:"relay" json:"relay"`                           // RelayConfig for incoming connections.
+	Uplink          UplinkConfig          `yaml:"uplink" json:"uplink"`                         // UplinkConfig for managing uplink configuration.
+	Cache           CacheConfig           `yaml:"cache" json:"cache,omitempty"`                 // CacheConfig for cache settings.
+	Redis           RedisConfig           `yaml:"redis" json:"redis,omitempty"`                 // RedisConfig for using redis as cache.
+	FilesystemCache FilesystemCacheConfig `yaml:"filesystem" json:"filesystem,omitempty"`       // FilesystemCacheConfig for using filesystem as cache.
+	Supergraphs     []SupergraphConfig    `yaml:"supergraphs" json:"supergraphs,omitempty"`     // SupergraphConfig for supergraph settings.
+	Webhook         WebhookConfig         `yaml:"webhook" json:"webhook,omitempty"`             // WebhookConfig for webhook handling.
+	Polling         PollingConfig         `yaml:"polling" json:"polling,omitempty"`             // PollingConfig for polling settings.
+	ManagementAPI   ManagementAPIConfig   `yaml:"managementAPI" json:"managementAPI,omitempty"` // ManagementAPIConfig for management API settings.
 }
 
 // RelayConfig defines the address the proxy server listens on.
 type RelayConfig struct {
-	Address   string         `yaml:"address"`   // Address to bind the relay server on.
-	TLS       RelayTlsConfig `yaml:"tls"`       // TLS configuration for the relay server.
-	PublicURL string         `yaml:"publicURL"` // Public URL for the relay server.
+	Address   string         `yaml:"address" json:"address,omitempty" jsonschema:"default=localhost:8080,example=0.0.0.0:8000"` // Address to bind the relay server on.
+	TLS       RelayTlsConfig `yaml:"tls" json:"tls,omitempty"`                                                                  // TLS configuration for the relay server.
+	PublicURL string         `yaml:"publicURL" json:"publicURL,omitempty"`                                                      // Public URL for the relay server.
 }
 
 // RelayTlsConfig defines the TLS configuration for the relay server.
 type RelayTlsConfig struct {
-	CertFile string `yaml:"cert"` // Path to the certificate file.
-	KeyFile  string `yaml:"key"`  // Path to the key file.
+	CertFile string `yaml:"cert" json:"cert"` // Path to the certificate file.
+	KeyFile  string `yaml:"key" json:"key"`   // Path to the key file.
 }
 
 // UplinkConfig details the configuration for connecting to upstream servers.
 type UplinkConfig struct {
-	URLs         []string `yaml:"urls"`         // List of URLs to use as uplink targets.
-	Timeout      int      `yaml:"timeout"`      // Timeout for uplink requests, in seconds.
-	RetryCount   int      `yaml:"retryCount"`   // Number of times to retry on uplink failure.
-	StudioAPIURL string   `yaml:"studioAPIURL"` // URL for the Studio API.
+	URLs         []string `yaml:"urls" json:"urls"`                           // List of URLs to use as uplink targets.
+	Timeout      int      `yaml:"timeout" json:"timeout,omitempty"`           // Timeout for uplink requests, in seconds.
+	RetryCount   int      `yaml:"retryCount" json:"retryCount,omitempty"`     // Number of times to retry on uplink failure.
+	StudioAPIURL string   `yaml:"studioAPIURL" json:"studioAPIURL,omitempty"` // URL for the Studio API.
 }
 
 // CacheConfig specifies the cache duration and max size.
 type CacheConfig struct {
-	Enabled  bool `yaml:"enabled"`  // Whether caching is enabled.
-	Duration int  `yaml:"duration"` // Duration to keep cached content, in seconds.
-	MaxSize  int  `yaml:"maxSize"`  // Maximum size of the cache.
+	Enabled  bool `yaml:"enabled" json:"enabled" jsonschema:"default=true"` // Whether in-memory caching is enabled.
+	Duration int  `yaml:"duration" json:"duration,omitempty"`               // Duration to keep in-memory cached content, in seconds.
+	MaxSize  int  `yaml:"maxSize" json:"maxSize,omitempty"`                 // Maximum size of the in-memory cache.
 }
 
 // RedisConfig defines the configuration for connecting to a Redis cache.
 type RedisConfig struct {
-	Enabled  bool   `yaml:"enabled"`  // Whether Redis caching is enabled.
-	Address  string `yaml:"address"`  // Address of the Redis server.
-	Password string `yaml:"password"` // Password for Redis authentication.
-	Database int    `yaml:"database"` // Database to use in the Redis server.
+	Enabled  bool   `yaml:"enabled" json:"enabled" jsonschema:"default=false"` // Whether Redis caching is enabled.
+	Address  string `yaml:"address" json:"address"`                            // Address of the Redis server.
+	Password string `yaml:"password" json:"password,omitempty"`                // Password for Redis authentication.
+	Database int    `yaml:"database" json:"database,omitempty"`                // Database to use in the Redis server.
 }
 
 // FilesystemCacheConfig defines the configuration for connecting to a Redis cache.
 type FilesystemCacheConfig struct {
-	Enabled   bool   `yaml:"enabled"`   // Whether Redis caching is enabled.
-	Directory string `yaml:"directory"` // Path to the filesystem cache.
+	Enabled   bool   `yaml:"enabled" json:"enabled" jsonschema:"default=false"` // Whether Redis caching is enabled.
+	Directory string `yaml:"directory" json:"directory"`                        // Path to the filesystem cache.
 }
 
 // WebhookConfig defines the configuration for webhook handling.
 type WebhookConfig struct {
-	Enabled bool   `yaml:"enabled"` // Whether webhook handling is enabled.
-	Path    string `yaml:"path"`    // Path to bind the webhook handler on.
-	Secret  string `yaml:"secret"`  // Secret for verifying webhook requests.
+	Enabled bool   `yaml:"enabled" json:"enabled" jsonschema:"default=false"` // Whether webhook handling is enabled.
+	Path    string `yaml:"path" json:"path"`                                  // Path to bind the webhook handler on.
+	Secret  string `yaml:"secret" json:"secret"`                              // Secret for verifying webhook requests.
 }
 
 // PollingConfig defines the configuration for polling from uplink.
 type PollingConfig struct {
-	Enabled          bool     `yaml:"enabled"`          // Whether polling is enabled.
-	Interval         int      `yaml:"interval"`         // Interval for polling, in seconds. Can only use either `interval` or `cronExpression`.
-	Expressions      []string `yaml:"cronExpressions"`  // Cron expression to use for polling. Can only use either `interval` or `cronExpression`.
-	RetryCount       int      `yaml:"retryCount"`       // Number of times to retry on polling failure.
-	Entitlements     *bool    `yaml:"entitlements"`     // Whether to poll for entitlements.
-	Supergraph       *bool    `yaml:"supergraph"`       // Whether to poll for supergraph.
-	PersistedQueries *bool    `yaml:"persistedQueries"` // Whether to poll for persisted queries.
+	Enabled          bool     `yaml:"enabled" json:"enabled" jsonschema:"default=false"`                             // Whether polling is enabled.
+	Interval         int      `yaml:"interval" json:"interval,omitempty"`                                            // Interval for polling, in seconds. Can only use either `interval` or `cronExpression`.
+	Expressions      []string `yaml:"cronExpressions" json:"cronExpressions,omitempty"`                              // Cron expression to use for polling. Can only use either `interval` or `cronExpression`.
+	RetryCount       int      `yaml:"retryCount" json:"retryCount,omitempty"`                                        // Number of times to retry on polling failure.
+	Entitlements     *bool    `yaml:"entitlements" json:"entitlements,omitempty" jsonschema:"default=true"`          // Whether to poll for entitlements.
+	Supergraph       *bool    `yaml:"supergraph" json:"supergraph,omitempty" jsonschema:"default=true"`              // Whether to poll for supergraph.
+	PersistedQueries *bool    `yaml:"persistedQueries" json:"persistedQueries,omitempty" jsonschema:"default=false"` // Whether to poll for persisted queries.
 }
 
 // SupergraphConfig defines the list of graphs to use.
 type SupergraphConfig struct {
-	GraphRef              string `yaml:"graphRef"`
-	ApolloKey             string `yaml:"apolloKey"`
-	LaunchID              string `yaml:"launchID"`
-	PersistedQueryVersion string `yaml:"persistedQueryVersion"`
-	OfflineLicense        string `yaml:"offlineLicense"`
+	GraphRef              string `yaml:"graphRef" json:"graphRef"`
+	ApolloKey             string `yaml:"apolloKey" json:"apolloKey"`
+	LaunchID              string `yaml:"launchID" json:"launchID,omitempty"`
+	PersistedQueryVersion string `yaml:"persistedQueryVersion" json:"persistedQueryVersion,omitempty"`
+	OfflineLicense        string `yaml:"offlineLicense" json:"offlineLicense,omitempty"`
 }
 
 type ManagementAPIConfig struct {
-	Enabled bool   `yaml:"enabled"` // Whether the management API is enabled.
-	Path    string `yaml:"path"`    // Path to bind the management API handler on.
-	Secret  string `yaml:"secret"`  // Secret for verifying management API requests.
+	Enabled bool   `yaml:"enabled" json:"enabled" jsonschema:"default=false"` // Whether the management API is enabled.
+	Path    string `yaml:"path" json:"path,omitempty"`                        // Path to bind the management API handler on.
+	Secret  string `yaml:"secret" json:"secret,omitempty"`                    // Secret for verifying management API requests.
 }
 
 var currentConfig *Config
@@ -361,4 +364,21 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+func PrintConfigJSONSchema() (string, error) {
+	r := new(jsonschema.Reflector)
+	r.AddGoComments("apollosolutions/uplink-relay", "./config")
+	s := r.Reflect(&Config{})
+	jsonSchema, err := s.MarshalJSON()
+	if err != nil {
+		return "", err
+	}
+	// this isn't great, but allows us to pretty print the JSON schema vs. compact for readability
+	buf := &bytes.Buffer{}
+	if err := json.Indent(buf, jsonSchema, "", "\t"); err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
 }

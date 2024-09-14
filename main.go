@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -33,8 +34,9 @@ import (
 
 var (
 	// Parse command-line flags.
-	configPath  = flag.String("config", "config.yml", "Path to the configuration file")
-	enableDebug = flag.Bool("debug", false, "Enable debug logging")
+	configPath   = flag.String("config", "config.yml", "Path to the configuration file")
+	enableDebug  = flag.Bool("debug", false, "Enable debug logging")
+	configSchema = flag.Bool("config-schema", false, "Print the JSON schema for the configuration file")
 )
 
 // init parses the command-line flags.
@@ -46,7 +48,14 @@ func init() {
 func main() {
 	// Initialize the logger.
 	logger := logger.MakeLogger(enableDebug)
-
+	if *configSchema {
+		jsonSchema, err := config.PrintConfigJSONSchema()
+		if err != nil {
+			logger.Error(err.Error())
+		}
+		fmt.Print(jsonSchema)
+		return
+	}
 	// Load the default configuration.
 	defaultConfig := config.NewDefaultConfig()
 
