@@ -1,0 +1,63 @@
+# $schema: configuration_schema.json
+headers:
+  all:
+    request:
+      - propagate:
+          matching: "^*"
+
+include_subgraph_errors:
+  all: true
+
+telemetry:
+  instrumentation:
+    spans:
+      mode: spec_compliant
+      default_attribute_requirement_level: recommended
+
+#  exporters:
+#    tracing:
+#      common:
+#        service_name: "apollo-router"
+#      zipkin:
+#        enabled: true
+
+#coprocessor:
+#  url: http://localhost:3000
+#  router:
+#    request:
+#      headers: true
+
+#supergraph:
+#  query_planning:
+#    cache:
+#      in_memory:
+#        limit: 1
+#      redis:
+#        urls: [ "redis://localhost:6379" ]
+
+#rhai:
+#  main: main.rhai
+#  scripts: rhai/
+
+#apq:
+#  router:
+#    cache:
+#      in_memory:
+#          limit: 1
+#      redis:
+#        urls: [ "redis://localhost:6379" ]
+
+#preview_entity_cache:
+#  enabled: true
+#  redis:
+#    urls: ["redis://localhost:6379"]
+#    timeout: 2ms
+#    ttl: 24h
+
+#preview_demand_control:
+#  enabled: true
+#  mode: measure
+#  strategy:
+#    static_estimated:
+#      list_size: 10
+#      max: 100
