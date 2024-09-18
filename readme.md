@@ -18,30 +18,37 @@ We may not respond to issues and pull requests at this time.
 
 ## Getting Started
 
-To use Uplink Relay with Apollo Router, you need to configure the `--apollo-uplink-endpoints` option to point to the Uplink Relay instance. Here's an example:
+### Downloading a release
+You can run Uplink Relay as a [Docker image](https://github.com/apollosolutions/uplink-relay/pkgs/container/uplink-relay)
+or manually running the pre-compiled [release binary](https://github.com/apollosolutions/uplink-relay/releases)
+
+```shell
+docker pull ghcr.io/apollosolutions/uplink-relay:latest
+```
+
+### Starting with Router
+To use Uplink Relay with Apollo Router, you need to configure the `--apollo-uplink-endpoints` option in Apollo Router to point to the Uplink Relay instance. Here's an example:
 
 ```bash
-router --apollo-uplink-endpoints=http://localhost:8080
+./router --apollo-uplink-endpoints=http://localhost:8080
 ```
 
 You can also use the `APOLLO_UPLINK_ENDPOINTS` environment variable:
 
 ```bash
 export APOLLO_UPLINK_ENDPOINTS=http://localhost:8080
-router
+./router
 ```
 
-## Docker
+### Starting Uplink Relay]
+
+Uplink Relay takes a config file `config.yml`.
 You can run Uplink Relay in a Docker container. 
 
 Here's how to use the pre-built Docker image:
 ```
-docker run -p 8080:8080 --mount "type=bind,source=./config.yml,target=/app/config.yml" ghcr.io/apollosolutions/uplink-relay:v0.0.1 --config /app/config.yml
+docker run -p 8080:8080 --mount "type=bind,source=./config.yml,target=/app/config.yml" ghcr.io/apollosolutions/uplink-relay:latest --config /app/config.yml
 ```
-
-## Binaries
-
-At the moment, Uplink Relay does not provide prebuilt binaries and will need to be built using the steps under [the developing locally section](#developing-locally).
 
 ## Configuration
 

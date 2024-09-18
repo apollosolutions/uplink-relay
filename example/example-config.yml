@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=../.vscode/configuration_schema.json
+relay:
+  address: "0.0.0.0:8080"
+  # tls:
+  #   cert: "./localhost.crt"
+  #   key: "./localhost.key"
+uplink:
+  timeout: 10
+  retryCount: 5
+  urls:
+    - "https://uplink.api.apollographql.com/"
+    # - "https://aws.uplink.api.apollographql.com/"
+cache:
+  enabled: false
+  duration: 60 # Cache duration in seconds, default is -1 (forever)
+  maxSize: 1024
+# redis:
+#   enabled: true
+#   address: "localhost:6379"
+#   password: admin
+#   database: 0
+filesystem:
+  enabled: true
+  directory: /app/tempcache
+supergraphs:
+  - graphRef: "${APOLLO_GRAPH_REF}"
+    apolloKey: "${APOLLO_KEY}"
+polling:
+  enabled: false
+  interval: 10
+  retryCount: 5
+webhook:
+  enabled: false
+  path: "/webhook"
+  secret: "${APOLLO_WEBHOOK_SECRET}"
