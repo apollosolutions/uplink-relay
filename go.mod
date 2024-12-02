@@ -8,12 +8,12 @@ require (
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/invopop/jsonschema v0.12.0
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/vektah/gqlparser/v2 v2.5.19
+	github.com/vektah/gqlparser/v2 v2.5.20
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	github.com/agnivade/levenshtein v1.1.1 // indirect
+	github.com/agnivade/levenshtein v1.2.0 // indirect
 	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
