@@ -1,8 +1,11 @@
 module apollosolutions/uplink-relay
 
-go 1.22.2
+go 1.22.5
+
+toolchain go1.23.5
+
 require (
-	github.com/99designs/gqlgen v0.17.62
+	github.com/99designs/gqlgen v0.17.64
 	github.com/alicebob/miniredis/v2 v2.34.0
 	github.com/go-jose/go-jose v2.6.3+incompatible
 	github.com/go-redis/redis v6.15.9+incompatible
