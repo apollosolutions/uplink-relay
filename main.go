@@ -172,7 +172,7 @@ func startup(userConfig *config.Config, logger *slog.Logger, systemCache cache.C
 
 	proxy.DeregisterHandlers()
 	// Set up the main request handler
-	proxy.RegisterHandlers("/*", proxy.RelayHandler(userConfig, systemCache, rrSelector, httpClient, logger))
+	proxy.RegisterHandlers("/", proxy.RelayHandler(userConfig, systemCache, rrSelector, httpClient, logger))
 	proxy.RegisterHandlers("/persisted-queries/*", persistedqueries.PersistedQueryHandler(logger, httpClient, systemCache))
 	// Set up the webhook handler if enabled
 	if userConfig.Webhook.Enabled {
