@@ -5,13 +5,13 @@ go 1.22.5
 toolchain go1.23.5
 
 require (
-	github.com/99designs/gqlgen v0.17.62
+	github.com/99designs/gqlgen v0.17.64
 	github.com/alicebob/miniredis/v2 v2.34.0
 	github.com/go-jose/go-jose v2.6.3+incompatible
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/invopop/jsonschema v0.13.0
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/vektah/gqlparser/v2 v2.5.21
+	github.com/vektah/gqlparser/v2 v2.5.22
 	gopkg.in/yaml.v3 v3.0.1
 )
 
