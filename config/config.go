@@ -116,7 +116,7 @@ func NewDefaultConfig() *Config {
 			TLS:     RelayTlsConfig{},
 		},
 		Uplink: UplinkConfig{
-			URLs:         []string{"http://localhost:8081"},
+			URLs:         []string{"https://uplink.api.apollographql.com/", "https://aws.uplink.api.apollographql.com/"},
 			Timeout:      30,
 			RetryCount:   1,
 			StudioAPIURL: "https://graphql.api.apollographql.com/api/graphql",
