@@ -34,7 +34,7 @@ import (
 
 var (
 	// Parse command-line flags.
-	configPath   = flag.String("config", "config.yml", "Path to the configuration file")
+	configPath   = flag.String("config", "", "Path to the configuration file")
 	enableDebug  = flag.Bool("debug", false, "Enable debug logging")
 	configSchema = flag.Bool("config-schema", false, "Print the JSON schema for the configuration file")
 )
@@ -84,6 +84,7 @@ func main() {
 	if mergedConfig.Cache.Enabled {
 		uplinkCaches = append(uplinkCaches, cache.NewMemoryCache(mergedConfig.Cache.MaxSize))
 	}
+	// Memory -> Filesystem -> Redis
 	if mergedConfig.FilesystemCache.Enabled {
 		logger.Info("Using filesystem cache", "directory", mergedConfig.FilesystemCache.Directory)
 		filesystemCache, err := filesystem_cache.NewFilesystemCache(mergedConfig.FilesystemCache.Directory)
@@ -172,7 +173,7 @@ func startup(userConfig *config.Config, logger *slog.Logger, systemCache cache.C
 
 	proxy.DeregisterHandlers()
 	// Set up the main request handler
-	proxy.RegisterHandlers("/*", proxy.RelayHandler(userConfig, systemCache, rrSelector, httpClient, logger))
+	proxy.RegisterHandlers("/", proxy.RelayHandler(userConfig, systemCache, rrSelector, httpClient, logger))
 	proxy.RegisterHandlers("/persisted-queries/*", persistedqueries.PersistedQueryHandler(logger, httpClient, systemCache))
 	// Set up the webhook handler if enabled
 	if userConfig.Webhook.Enabled {

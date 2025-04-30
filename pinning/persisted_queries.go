@@ -132,7 +132,7 @@ func PinPersistedQueries(userConfig *config.Config, logger *slog.Logger, systemC
 
 	if apiResponse.Data.Variant.Typename != "GraphVariant" {
 		logger.Error("Failed to get persisted query list", "graphRef", graphRef, "version", persistedQueryVersion, "message", apiResponse.Data.Variant.Message)
-		return fmt.Errorf(apiResponse.Data.Variant.Message)
+		return fmt.Errorf("%s", apiResponse.Data.Variant.Message)
 	}
 	// Find the matching edge for the persisted query version
 	node, err := findMatchingNode(apiResponse.Data.Variant.PersistedQueryQueryList.Builds.Edges, persistedQueryVersion)

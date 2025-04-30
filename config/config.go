@@ -116,9 +116,9 @@ func NewDefaultConfig() *Config {
 			TLS:     RelayTlsConfig{},
 		},
 		Uplink: UplinkConfig{
-			URLs:         []string{"http://localhost:8081"},
+			URLs:         []string{"https://uplink.api.apollographql.com/", "https://aws.uplink.api.apollographql.com/"},
 			Timeout:      30,
-			RetryCount:   -1,
+			RetryCount:   1,
 			StudioAPIURL: "https://graphql.api.apollographql.com/api/graphql",
 		},
 		Cache: CacheConfig{
@@ -165,7 +165,7 @@ func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableD
 		loadedConfig.Uplink.Timeout = defaultConfig.Uplink.Timeout
 	}
 
-	if loadedConfig.Uplink.RetryCount == -1 {
+	if loadedConfig.Uplink.RetryCount < 1 {
 		loadedConfig.Uplink.RetryCount = defaultConfig.Uplink.RetryCount
 	}
 
@@ -218,6 +218,10 @@ func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableD
 
 // LoadConfig reads and unmarshals a YAML configuration file into a Config struct.
 func LoadConfig(configPath string) (*Config, error) {
+	if configPath == "" {
+		return NewDefaultConfig(), nil
+	}
+
 	configFile, err := os.Open(configPath)
 	if err != nil {
 		return nil, err
