@@ -1,5 +1,5 @@
 # Start from the latest golang base image
-FROM golang:1.22 as build
+FROM golang:1.24 AS build
 
 # Set the Current Working Directory inside the container
 WORKDIR /app

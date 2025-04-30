@@ -40,13 +40,29 @@ export APOLLO_UPLINK_ENDPOINTS=http://localhost:8080
 ./router
 ```
 
-### Starting Uplink Relay]
+**⚠️ IMPORTANT ⚠️**
+
+The URL being used must end in the root path - that is, your listen URL should be the port you are listening to in your configuration. For example, given this configuration: 
+
+```yml 
+relay:
+  address: "0.0.0.0:12345"
+```
+
+You will need to configure the router with:
+
+```bash
+./router --apollo-uplink-endpoints=http://localhost:12345
+```
+
+### Starting Uplink Relay
 
 Uplink Relay takes a config file `config.yml`.
 You can run Uplink Relay in a Docker container. 
 
 Here's how to use the pre-built Docker image:
-```
+
+```bash
 docker run -p 8080:8080 --mount "type=bind,source=./config.yml,target=/app/config.yml" ghcr.io/apollosolutions/uplink-relay:latest --config /app/config.yml
 ```
 
@@ -106,6 +122,8 @@ webhook:
 
 # Enabling the management API, which is exposed on /graphql by default
 # It also has introspection enabled to easily find accessible functionality
+# Please note that you must use a different path other than `/` as it will conflict with the 
+# default listener
 managementAPI: 
   enabled: true
   path: /graphql
@@ -113,10 +131,15 @@ managementAPI:
 
 ## Developing Locally
 
+**⚠️ IMPORTANT ⚠️**
+
+This project requires the use of Go 1.24 or higher.
+
 1. Clone the repository: `git clone https://github.com/apollosolutions/uplink-relay.git`
 3. Install dependencies: `go mod download`
 4. Build the project: `go build .`
 5. Run the project: `./uplink-relay`
+
 
 ### Developing with Docker
 

@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"fmt"
 	"sync"
 	"time"
 )
@@ -26,7 +25,6 @@ func (c *MemoryCache) Get(key string) ([]byte, bool) {
 
 	item, found := c.items[key]
 
-	fmt.Printf("item: %v\n", item)
 	// If the item is not found or has expired, return a cache miss.
 	// The special case of time.Unix(1<<63-1, 0) is used to indicate that an item never expires- and
 	// time.Before will always return true for this case.
