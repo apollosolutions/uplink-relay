@@ -27,6 +27,7 @@ import (
 	apolloredis "apollosolutions/uplink-relay/redis"
 	"apollosolutions/uplink-relay/tiered_cache"
 	"apollosolutions/uplink-relay/uplink"
+	"apollosolutions/uplink-relay/version"
 	"apollosolutions/uplink-relay/webhooks"
 
 	"github.com/99designs/gqlgen/graphql/handler"
@@ -37,6 +38,8 @@ var (
 	configPath   = flag.String("config", "", "Path to the configuration file")
 	enableDebug  = flag.Bool("debug", false, "Enable debug logging")
 	configSchema = flag.Bool("config-schema", false, "Print the JSON schema for the configuration file")
+	// Version is the version of the application.
+	versionFlag = flag.Bool("version", false, "Print the version of the application")
 )
 
 // init parses the command-line flags.
@@ -56,6 +59,13 @@ func main() {
 		fmt.Print(jsonSchema)
 		return
 	}
+
+	// Print the version if the version flag is set.
+	if *versionFlag {
+		fmt.Println(version.BuildVersion())
+		return
+	}
+
 	// Load the default configuration.
 	defaultConfig := config.NewDefaultConfig()
 

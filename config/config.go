@@ -136,6 +136,7 @@ func NewDefaultConfig() *Config {
 			PersistedQueries: &pFalse,
 			Entitlements:     &pTrue,
 			Supergraph:       &pTrue,
+			RetryCount:       1,
 		},
 		ManagementAPI: ManagementAPIConfig{
 			Enabled: false,
@@ -199,6 +200,10 @@ func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableD
 
 	if loadedConfig.Polling.PersistedQueries == nil {
 		loadedConfig.Polling.PersistedQueries = defaultConfig.Polling.PersistedQueries
+	}
+
+	if loadedConfig.Polling.RetryCount < 1 {
+		loadedConfig.Polling.RetryCount = defaultConfig.Polling.RetryCount
 	}
 
 	if loadedConfig.ManagementAPI.Path == "" {
