@@ -9,7 +9,7 @@ require (
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/invopop/jsonschema v0.13.0
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/vektah/gqlparser/v2 v2.5.26
+	github.com/vektah/gqlparser/v2 v2.5.27
 	gopkg.in/yaml.v3 v3.0.1
 )
 
