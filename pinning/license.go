@@ -39,7 +39,7 @@ func PinOfflineLicense(userConfig *config.Config, logger *slog.Logger, systemCac
 	modifiedTime := warnAt.AddDate(0, 0, -30)
 
 	// Store the core schema in the cache
-	if userConfig.Cache.Enabled {
+	if userConfig.Cache.Enabled != nil && *userConfig.Cache.Enabled {
 		cacheEntry := cache.CacheItem{
 			ID:           modifiedTime.Format(time.RFC3339),
 			Hash:         util.HashString(license),

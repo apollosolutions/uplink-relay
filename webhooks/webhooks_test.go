@@ -35,7 +35,7 @@ func TestWebhookHandler(t *testing.T) {
 			Secret: "secret",
 		},
 		Cache: config.CacheConfig{
-			Enabled:  true,
+			Enabled:  &truePointer,
 			MaxSize:  10,
 			Duration: -1,
 		},

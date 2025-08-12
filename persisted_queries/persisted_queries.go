@@ -86,7 +86,7 @@ func PersistedQueryHandler(logger *slog.Logger, client *http.Client, systemCache
 
 func CachePersistedQueryChunkData(config *config.Config, logger *slog.Logger, systemCache cache.Cache, chunks []UplinkPersistedQueryChunk) ([]UplinkPersistedQueryChunk, error) {
 	// Validate caching is disabled, but also ignore this logic altogether if there's no public URL in the config, as it's used to advertise the cached URLs.
-	if !config.Cache.Enabled || config.Relay.PublicURL == "" {
+	if config.Cache.Enabled == nil || !*config.Cache.Enabled || config.Relay.PublicURL == "" {
 		logger.Debug("Caching disabled, skipping", "publicURL", config.Relay.PublicURL, "cacheEnabled", config.Cache.Enabled)
 		return chunks, nil
 	}
@@ -197,7 +197,7 @@ func FetchPQManifest(userConfig *config.Config, systemCache cache.Cache, logger 
 		return err
 	}
 
-	if userConfig.Cache.Enabled {
+	if userConfig.Cache.Enabled != nil && *userConfig.Cache.Enabled {
 		chunks, err := CachePersistedQueryChunkData(userConfig, logger, systemCache, response.Data.PersistedQueries.Chunks)
 		if err != nil {
 			return err

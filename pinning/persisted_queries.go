@@ -141,7 +141,7 @@ func PinPersistedQueries(userConfig *config.Config, logger *slog.Logger, systemC
 		return err
 	}
 
-	if userConfig.Cache.Enabled {
+	if userConfig.Cache.Enabled != nil && *userConfig.Cache.Enabled {
 		// Insert the pinned cache entry
 		chunks, err := cachePinnedChunks(userConfig, logger, systemCache, node)
 		if err != nil {

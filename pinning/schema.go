@@ -144,7 +144,7 @@ func PinLaunchID(userConfig *config.Config, logger *slog.Logger, systemCache cac
 	}
 
 	// Store the core schema in the cache
-	if userConfig.Cache.Enabled {
+	if userConfig.Cache.Enabled != nil && *userConfig.Cache.Enabled {
 		cacheKey := cache.MakeCacheKey(graphRef, SupergraphPinned)
 		insertPinnedCacheEntry(logger, systemCache, cacheKey, apiResponse.Data.Graph.Variant.Launch.Build.Result.CoreSchema.CoreDocument, apiResponse.Data.Graph.Variant.ID, modifiedAt)
 	}
