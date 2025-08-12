@@ -202,7 +202,7 @@ func modifyProxiedResponse(config *config.Config, systemCache cache.Cache, cache
 				uplinkRequest.Variables["ifAfterId"] = ""
 			}
 			// Cache the response for future requests.
-			if config.Cache.Enabled {
+			if config.Cache.Enabled != nil && *config.Cache.Enabled {
 				logger.Debug("Caching schema", "key", cacheKey)
 				err = schema.CacheSchema(systemCache, logger, uplinkRequest.Variables["graph_ref"].(string), supergraph, id, uplinkRequest.Variables["ifAfterId"].(string), config.Cache.Duration)
 				if err != nil {
@@ -234,7 +234,7 @@ func modifyProxiedResponse(config *config.Config, systemCache cache.Cache, cache
 				return err
 			}
 			// Cache the response for future requests, if caching is enabled
-			if config.Cache.Enabled {
+			if config.Cache.Enabled != nil && *config.Cache.Enabled {
 				logger.Debug("Caching JWT", "key", cacheKey)
 				ifAfterId := ""
 				if uplinkRequest.Variables["ifAfterId"] != nil {
@@ -259,7 +259,7 @@ func modifyProxiedResponse(config *config.Config, systemCache cache.Cache, cache
 			logger.Debug("PersistedQuery response", "response", uplinkResponse)
 
 			// Cache the response for future requests, if caching is enabled
-			if config.Cache.Enabled {
+			if config.Cache.Enabled != nil && *config.Cache.Enabled {
 				logger.Debug("Caching PersistedQuery", "key", cacheKey)
 				chunks, err := persistedqueries.CachePersistedQueryChunkData(config, logger, systemCache, uplinkResponse.Data.PersistedQueries.Chunks)
 				if err != nil {
@@ -530,7 +530,7 @@ func RelayHandler(userConfig *config.Config, currentCache cache.Cache, rrSelecto
 		// Make the cache key using the graphID, variantID, and operationName
 		cacheKey := cache.MakeCacheKey(uplinkRequest.Variables["graph_ref"].(string), operationName, uplinkRequest.Variables)
 		// If cache is enabled, attempt to retrieve the response from the cache
-		if userConfig.Cache.Enabled {
+		if userConfig.Cache.Enabled != nil && *userConfig.Cache.Enabled {
 			// Check if the response is cached and return it if found
 			if cacheContent, keyFound := currentCache.Get(cacheKey); keyFound {
 				// Handle the cache hit

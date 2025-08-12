@@ -109,7 +109,7 @@ func WebhookHandler(userConfig *config.Config, systemCache cache.Cache, httpClie
 		// Convert the schema to a string
 		schema := string(response)
 
-		if userConfig.Cache.Enabled {
+		if userConfig.Cache.Enabled != nil && *userConfig.Cache.Enabled {
 			// Create a cache key using the GraphID, VariantID
 			cacheKey := cache.MakeCacheKey(data.VariantID, "SupergraphSdlQuery")
 			if cacheKey == "" {

@@ -83,7 +83,7 @@ func FetchSchema(userConfig *config.Config, systemCache cache.Cache, logger *slo
 		logger.Error("Failed to parse license expiration", "graphRef", variables["graph_ref"], "err", err)
 		return err
 	}
-	if userConfig.Cache.Enabled {
+	if userConfig.Cache.Enabled != nil && *userConfig.Cache.Enabled {
 		// Cache the schema
 		return CacheSchema(systemCache, logger, graphRef, response.Data.RouterConfig.SupergraphSdl, id, "", userConfig.Cache.Duration)
 	}

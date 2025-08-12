@@ -40,13 +40,14 @@ func TestRelayHandler(t *testing.T) {
 	// Create a mock cache
 	mockCache := cache.NewMemoryCache(10)
 
+	pTrue := true
 	// Create a mock config
 	mockConfig := &config.Config{
 		Uplink: config.UplinkConfig{
 			URLs: []string{mockServer.URL},
 		},
 		Cache: config.CacheConfig{
-			Enabled:  true,
+			Enabled:  &pTrue,
 			Duration: 50000,
 		},
 	}

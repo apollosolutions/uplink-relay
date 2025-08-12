@@ -91,7 +91,7 @@ func main() {
 	var uplinkCache cache.Cache
 	// Initialize the cache based on the configuration.
 	// We want to use the first cache that is enabled, which should be the in-memory cache
-	if mergedConfig.Cache.Enabled {
+	if mergedConfig.Cache.Enabled != nil && *mergedConfig.Cache.Enabled {
 		uplinkCaches = append(uplinkCaches, cache.NewMemoryCache(mergedConfig.Cache.MaxSize))
 	}
 	// Memory -> Filesystem -> Redis
