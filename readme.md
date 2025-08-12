@@ -4,8 +4,11 @@ Uplink Relay is a caching reverse-proxy for Apollo Uplink. It's designed to impr
 
 ## ⚠️ Disclaimer ⚠️
 
-This project is experimental and is not a fully-supported Apollo Graph project.
-We may not respond to issues and pull requests at this time.
+This project is not a fully-supported Apollo Graph project for the general public.
+We may not respond to public issues and pull requests at this time, however, for Enterprise customers of [GraphOS](https://www.apollographql.com/graphos), support options are available for discussion.
+Please contact your Apollo representative for more information.
+
+For existing Enterpise customers, if you have an issue you need to raise for this project, please do so via our [Support Portal](https://support.apollographql.com/).
 
 ## Features
 
