@@ -88,7 +88,7 @@ func FetchRouterLicense(userConfig *config.Config, systemCache cache.Cache, logg
 		return err
 	}
 
-	if userConfig.Cache.Enabled {
+	if userConfig.Cache.Enabled != nil && *userConfig.Cache.Enabled {
 		// Cache the license
 		return CacheLicense(systemCache, logger, graphRef, response.Data.RouterEntitlements.Entitlement.Jwt, expiration, userConfig.Cache.Duration, "")
 	}

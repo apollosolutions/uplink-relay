@@ -52,9 +52,9 @@ type UplinkConfig struct {
 
 // CacheConfig specifies the cache duration and max size.
 type CacheConfig struct {
-	Enabled  bool `yaml:"enabled" json:"enabled" jsonschema:"default=true"` // Whether in-memory caching is enabled.
-	Duration int  `yaml:"duration" json:"duration,omitempty"`               // Duration to keep in-memory cached content, in seconds.
-	MaxSize  int  `yaml:"maxSize" json:"maxSize,omitempty"`                 // Maximum size of the in-memory cache.
+	Enabled  *bool `yaml:"enabled" json:"enabled" jsonschema:"default=true"` // Whether in-memory caching is enabled.
+	Duration int   `yaml:"duration" json:"duration,omitempty"`               // Duration to keep in-memory cached content, in seconds.
+	MaxSize  int   `yaml:"maxSize" json:"maxSize,omitempty"`                 // Maximum size of the in-memory cache.
 }
 
 // RedisConfig defines the configuration for connecting to a Redis cache.
@@ -122,7 +122,7 @@ func NewDefaultConfig() *Config {
 			StudioAPIURL: "https://graphql.api.apollographql.com/api/graphql",
 		},
 		Cache: CacheConfig{
-			Enabled:  true,
+			Enabled:  &pTrue,
 			Duration: -1,
 			MaxSize:  1000,
 		},
@@ -168,6 +168,10 @@ func MergeWithDefaultConfig(defaultConfig *Config, loadedConfig *Config, enableD
 
 	if loadedConfig.Uplink.RetryCount < 1 {
 		loadedConfig.Uplink.RetryCount = defaultConfig.Uplink.RetryCount
+	}
+
+	if loadedConfig.Cache.Enabled == nil {
+		loadedConfig.Cache.Enabled = defaultConfig.Cache.Enabled
 	}
 
 	if loadedConfig.Cache.Duration == 0 {
